@@ -101,11 +101,15 @@ class QuantumCanvasRenderer {
 
   initCanvasSize() {
     const rect = this.canvas.parentElement.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
+    // Limitar DPR a 2.0 máximo para evitar sobrecargar GPUs móviles en pantallas 3x/4x
+    const rawDpr = window.devicePixelRatio || 1;
+    const isMobile = window.innerWidth <= 960;
+    const dpr = isMobile ? Math.min(1.75, rawDpr) : Math.min(2.0, rawDpr);
+
     this.width = rect.width;
     this.height = rect.height;
-    this.canvas.width = this.width * dpr;
-    this.canvas.height = this.height * dpr;
+    this.canvas.width = Math.round(this.width * dpr);
+    this.canvas.height = Math.round(this.height * dpr);
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.scale(dpr, dpr);
 
@@ -121,7 +125,17 @@ class QuantumCanvasRenderer {
   }
 
   bindEvents() {
-    window.addEventListener('resize', () => this.initCanvasSize());
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => this.initCanvasSize(), 100);
+    }, { passive: true });
+
+    // Ahorro de batería y recursos: pausar renderizado cuando la pestaña está oculta
+    this.isTabVisible = true;
+    document.addEventListener('visibilitychange', () => {
+      this.isTabVisible = !document.hidden;
+    });
 
     // Mouse Down
     this.canvas.addEventListener('mousedown', (e) => {
@@ -195,15 +209,99 @@ class QuantumCanvasRenderer {
       this.scale = Math.min(Math.max(0.4, this.scale * zoomFactor), 2.2);
     }, { passive: false });
 
+    // Touch Events para móviles y tablets Android / iOS
+    this.initialPinchDistance = null;
+    this.initialPinchScale = 1.0;
+    this.lastTouchPos = { x: 0, y: 0 };
+    this.isTouchDragging = false;
+
+    this.canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const screenCoords = this.getScreenCoords(touch);
+        const clicked = this.getNodeAtScreen(screenCoords.x, screenCoords.y);
+
+        this.lastTouchPos.x = touch.clientX;
+        this.lastTouchPos.y = touch.clientY;
+
+        if (clicked) {
+          this.draggedNode = clicked;
+          const proj = this.project3D(clicked.x, clicked.y, 0);
+          this.dragOffset.x = screenCoords.x - proj.x;
+          this.dragOffset.y = screenCoords.y - proj.y;
+          this.selectedNode = clicked;
+          if (window.quantumAudio) window.quantumAudio.playClick();
+          if (this.onNodeClick) this.onNodeClick(clicked);
+        } else {
+          this.isOrbiting = true;
+          this.startMouse.x = touch.clientX;
+          this.startMouse.y = touch.clientY;
+        }
+      } else if (e.touches.length === 2) {
+        // Inicializar gesto Pinch-to-Zoom con Delta
+        this.isOrbiting = false;
+        this.draggedNode = null;
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        this.initialPinchDistance = Math.hypot(dx, dy);
+        this.initialPinchScale = this.scale;
+      }
+    }, { passive: false });
+
+    this.canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault(); // Prevenir scroll nativo del viewport al interactuar con el holograma
+
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - this.lastTouchPos.x;
+        const deltaY = touch.clientY - this.lastTouchPos.y;
+
+        if (this.draggedNode) {
+          this.draggedNode.x += deltaX * (0.8 / Math.max(0.5, this.scale));
+          this.draggedNode.y += deltaY * (0.8 / Math.max(0.5, this.scale));
+        } else if (this.isOrbiting) {
+          // Rotación orbital con sensibilidad delta adaptativa
+          this.targetRotY += deltaX * 0.007;
+          this.targetRotX += deltaY * 0.007;
+          this.targetRotX = Math.max(-0.25, Math.min(1.0, this.targetRotX));
+        }
+
+        this.lastTouchPos.x = touch.clientX;
+        this.lastTouchPos.y = touch.clientY;
+      } else if (e.touches.length === 2 && this.initialPinchDistance) {
+        // Pinch Zoom reactivo
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const currentDistance = Math.hypot(dx, dy);
+        const pinchDeltaFactor = currentDistance / this.initialPinchDistance;
+
+        this.scale = Math.min(Math.max(0.35, this.initialPinchScale * pinchDeltaFactor), 2.5);
+      }
+    }, { passive: false });
+
+    this.canvas.addEventListener('touchend', (e) => {
+      if (e.touches.length === 0) {
+        this.isOrbiting = false;
+        this.draggedNode = null;
+        this.initialPinchDistance = null;
+      } else if (e.touches.length === 1) {
+        this.lastTouchPos.x = e.touches[0].clientX;
+        this.lastTouchPos.y = e.touches[0].clientY;
+        this.initialPinchDistance = null;
+      }
+    });
+
     // Deshabilitar menú contextual en el canvas para rotación libre
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
   getScreenCoords(e) {
     const rect = this.canvas.getBoundingClientRect();
+    const cx = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+    const cy = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
     return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
+      x: cx - rect.left,
+      y: cy - rect.top
     };
   }
 
@@ -363,8 +461,10 @@ class QuantumCanvasRenderer {
 
   startRenderLoop() {
     const loop = (timestamp) => {
-      this.update(timestamp);
-      this.render();
+      if (this.isTabVisible !== false) {
+        this.update(timestamp);
+        this.render();
+      }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
@@ -753,11 +853,13 @@ class QuantumCanvasRenderer {
    * Dibuja Nodo Holográfico con Fresnel Glow en los bordes
    */
   drawHoloNode3D(ctx, act, p) {
-    const w = 135 * p.scale;
-    const h = 72 * p.scale;
+    // Factor de legibilidad dinámica para pantallas de diferente densidad y escala
+    const effectiveScale = Math.max(0.65, Math.min(1.4, p.scale));
+    const w = 142 * effectiveScale;
+    const h = 76 * effectiveScale;
     const x = p.x - w / 2;
     const y = p.y - h / 2;
-    const r = 6 * p.scale;
+    const r = Math.max(4, 6 * effectiveScale);
 
     const isHovered = this.hoveredNode === act;
     const isSelected = this.selectedNode === act;
@@ -785,61 +887,61 @@ class QuantumCanvasRenderer {
     // 2. Fondo de Cristal Glassmorphism
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, r);
-    ctx.fillStyle = act.es_critica ? 'rgba(30, 8, 22, 0.86)' : 'rgba(8, 16, 34, 0.82)';
+    ctx.fillStyle = act.es_critica ? 'rgba(32, 9, 24, 0.90)' : 'rgba(9, 18, 38, 0.88)';
     ctx.fill();
 
     // 3. Resplandor Neón
     ctx.strokeStyle = borderColor;
-    ctx.lineWidth = (isHovered || isSelected ? 2.8 : 1.6) * p.scale;
+    ctx.lineWidth = (isHovered || isSelected ? 2.8 : 1.8) * effectiveScale;
     ctx.shadowColor = glowColor;
     ctx.shadowBlur = (isHovered || isSelected ? 20 : 10) * fresnelIntensity;
     ctx.stroke();
     ctx.shadowBlur = 0;
 
     // 4. Franja Superior (ID y Te)
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
     ctx.beginPath();
-    ctx.roundRect(x + 1, y + 1, w - 2, 22 * p.scale, [r, r, 0, 0]);
+    ctx.roundRect(x + 1, y + 1, w - 2, 23 * effectiveScale, [r, r, 0, 0]);
     ctx.fill();
 
-    // Textos
-    const fontSizeId = Math.max(9, Math.round(11 * p.scale));
+    // Textos con tamaños protegidos para legibilidad en Android / móvil
+    const fontSizeId = Math.max(10, Math.round(12 * effectiveScale));
     ctx.font = `bold ${fontSizeId}px "Orbitron", sans-serif`;
     ctx.fillStyle = badgeColor;
     ctx.textAlign = 'left';
-    ctx.fillText(act.id, x + 8 * p.scale, y + 15 * p.scale);
+    ctx.fillText(act.id, x + 8 * effectiveScale, y + 16 * effectiveScale);
 
-    const fontSizeTe = Math.max(8, Math.round(10 * p.scale));
-    ctx.font = `${fontSizeTe}px "JetBrains Mono", monospace`;
+    const fontSizeTe = Math.max(9, Math.round(11 * effectiveScale));
+    ctx.font = `600 ${fontSizeTe}px "JetBrains Mono", monospace`;
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'right';
-    ctx.fillText(`Te:${act.Te.toFixed(1)}d`, x + w - 8 * p.scale, y + 15 * p.scale);
+    ctx.fillText(`Te:${act.Te.toFixed(1)}d`, x + w - 8 * effectiveScale, y + 16 * effectiveScale);
 
     // Nombre de Actividad
-    const fontSizeName = Math.max(8, Math.round(10.5 * p.scale));
+    const fontSizeName = Math.max(9.5, Math.round(11.5 * effectiveScale));
     ctx.font = `600 ${fontSizeName}px "Rajdhani", sans-serif`;
-    ctx.fillStyle = '#cbd5e1';
+    ctx.fillStyle = '#e2e8f0';
     ctx.textAlign = 'left';
-    const cleanName = act.nombre.length > 16 ? act.nombre.slice(0, 15) + '…' : act.nombre;
-    ctx.fillText(cleanName, x + 8 * p.scale, y + 36 * p.scale);
+    const cleanName = act.nombre.length > 17 ? act.nombre.slice(0, 16) + '…' : act.nombre;
+    ctx.fillText(cleanName, x + 8 * effectiveScale, y + 37 * effectiveScale);
 
     // Matriz de Tiempos ES, EF, LS, LF
-    const fontSizeMatrix = Math.max(7, Math.round(8.5 * p.scale));
-    ctx.font = `${fontSizeMatrix}px "JetBrains Mono", monospace`;
-    ctx.fillStyle = '#64748b';
-    ctx.fillText(`ES:${act.ES.toFixed(1)}`, x + 8 * p.scale, y + 50 * p.scale);
-    ctx.fillText(`EF:${act.EF.toFixed(1)}`, x + 68 * p.scale, y + 50 * p.scale);
-    ctx.fillText(`LS:${act.LS.toFixed(1)}`, x + 8 * p.scale, y + 63 * p.scale);
-    ctx.fillText(`LF:${act.LF.toFixed(1)}`, x + 68 * p.scale, y + 63 * p.scale);
+    const fontSizeMatrix = Math.max(8.5, Math.round(9.5 * effectiveScale));
+    ctx.font = `500 ${fontSizeMatrix}px "JetBrains Mono", monospace`;
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText(`ES:${act.ES.toFixed(1)}`, x + 8 * effectiveScale, y + 52 * effectiveScale);
+    ctx.fillText(`EF:${act.EF.toFixed(1)}`, x + 72 * effectiveScale, y + 52 * effectiveScale);
+    ctx.fillText(`LS:${act.LS.toFixed(1)}`, x + 8 * effectiveScale, y + 66 * effectiveScale);
+    ctx.fillText(`LF:${act.LF.toFixed(1)}`, x + 72 * effectiveScale, y + 66 * effectiveScale);
 
     // Indicador de Holgura
     ctx.textAlign = 'right';
     if (!act.es_critica) {
       ctx.fillStyle = act.holgura <= 2.5 ? '#ffb700' : '#00f0ff';
-      ctx.fillText(`H:${act.holgura.toFixed(1)}`, x + w - 6 * p.scale, y + 63 * p.scale);
+      ctx.fillText(`H:${act.holgura.toFixed(1)}`, x + w - 6 * effectiveScale, y + 66 * effectiveScale);
     } else {
       ctx.fillStyle = '#ff0055';
-      ctx.fillText('CRÍT', x + w - 6 * p.scale, y + 63 * p.scale);
+      ctx.fillText('CRÍTICO', x + w - 6 * effectiveScale, y + 66 * effectiveScale);
     }
 
     ctx.restore();
@@ -915,19 +1017,16 @@ class QuantumCanvasRenderer {
     this.ctx.globalAlpha = this.flickerAlpha;
 
     if (this.chromaticEnabled) {
-      // Aberración Cromática (Canales RGB desplazados 1.5px)
+      // Aberración Cromática optimizada (desfase RGB con dos pases aditivos ligeros)
+      this.ctx.globalCompositeOperation = 'source-over';
+      this.ctx.drawImage(this.offscreenCanvas, 0, 0, this.width, this.height);
+
       this.ctx.globalCompositeOperation = 'screen';
-
-      // Canal Rojo (desplazado a la izquierda)
-      this.ctx.drawImage(this.offscreenCanvas, -1.5, 0);
-
-      // Canal Verde (centro)
-      this.ctx.drawImage(this.offscreenCanvas, 0, 0);
-
-      // Canal Azul (desplazado a la derecha)
-      this.ctx.drawImage(this.offscreenCanvas, 1.5, 0);
+      this.ctx.globalAlpha = 0.35 * this.flickerAlpha;
+      this.ctx.drawImage(this.offscreenCanvas, -1.8, 0, this.width, this.height);
+      this.ctx.drawImage(this.offscreenCanvas, 1.8, 0, this.width, this.height);
     } else {
-      this.ctx.drawImage(this.offscreenCanvas, 0, 0);
+      this.ctx.drawImage(this.offscreenCanvas, 0, 0, this.width, this.height);
     }
 
     // Scanline láser horizontal que barre de arriba hacia abajo cada 3 segundos

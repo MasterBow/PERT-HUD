@@ -87,9 +87,19 @@ class ChronosApp {
 
       // Viewport Controls
       btnRecenter: document.getElementById('btn-recenter'),
+      btnZoomIn: document.getElementById('btn-zoom-in'),
+      btnZoomOut: document.getElementById('btn-zoom-out'),
       btnAutoLayout: document.getElementById('btn-auto-layout'),
       btnToggleParticles: document.getElementById('btn-toggle-particles'),
       btnToggleChromatic: document.getElementById('btn-toggle-chromatic'),
+
+      // Mobile Tabs
+      mobileTabBtns: document.querySelectorAll('.mobile-tab-btn'),
+      mobileViews: {
+        'sidebar-activities': document.getElementById('sidebar-activities'),
+        'viewport-container': document.getElementById('viewport-container'),
+        'sidebar-oracle': document.getElementById('sidebar-oracle')
+      },
 
       // Toast
       toast: document.getElementById('hud-toast'),
@@ -173,6 +183,18 @@ class ChronosApp {
       this.renderer.recenter();
       if (window.quantumAudio) window.quantumAudio.playClick();
     });
+    if (this.dom.btnZoomIn) {
+      this.dom.btnZoomIn.addEventListener('click', () => {
+        this.renderer.scale = Math.min(2.5, this.renderer.scale * 1.15);
+        if (window.quantumAudio) window.quantumAudio.playClick();
+      });
+    }
+    if (this.dom.btnZoomOut) {
+      this.dom.btnZoomOut.addEventListener('click', () => {
+        this.renderer.scale = Math.max(0.35, this.renderer.scale / 1.15);
+        if (window.quantumAudio) window.quantumAudio.playClick();
+      });
+    }
     this.dom.btnAutoLayout.addEventListener('click', () => {
       MotorPertCpm.calcularCapasTopologicas(this.actividades);
       this.renderer.autoLayout();
@@ -188,6 +210,34 @@ class ChronosApp {
         this.renderer.chromaticEnabled = !this.renderer.chromaticEnabled;
         this.dom.btnToggleChromatic.classList.toggle('active', this.renderer.chromaticEnabled);
         if (window.quantumAudio) window.quantumAudio.playClick();
+      });
+    }
+
+    // Pestañas móviles (Android / iOS)
+    if (this.dom.mobileTabBtns) {
+      this.dom.mobileTabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const targetId = btn.getAttribute('data-target');
+          this.dom.mobileTabBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+
+          Object.keys(this.dom.mobileViews).forEach(id => {
+            const el = this.dom.mobileViews[id];
+            if (el) {
+              if (id === targetId) {
+                el.classList.add('mobile-active-view');
+              } else {
+                el.classList.remove('mobile-active-view');
+              }
+            }
+          });
+
+          // Si seleccionó el viewport, recalcular dimensiones del canvas
+          if (targetId === 'viewport-container' && this.renderer) {
+            setTimeout(() => this.renderer.initCanvasSize(), 50);
+          }
+          if (window.quantumAudio) window.quantumAudio.playClick();
+        });
       });
     }
 

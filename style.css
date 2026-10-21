@@ -70,6 +70,7 @@ body {
   background-size: 100% 3px, 6px 100%;
   z-index: 999;
   opacity: 0.7;
+  transform: translateZ(0);
 }
 
 .vignette {
@@ -81,27 +82,30 @@ body {
   box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.85);
   pointer-events: none;
   z-index: 998;
+  transform: translateZ(0);
 }
 
-/* Resplandores ambientales de fondo */
+/* Resplandores ambientales de fondo con aceleración por hardware */
 .glow-orb {
   position: fixed;
   border-radius: 50%;
-  filter: blur(140px);
+  filter: blur(120px);
   pointer-events: none;
   z-index: 0;
-  opacity: 0.25;
+  opacity: 0.22;
+  will-change: transform;
+  transform: translateZ(0);
 }
 .glow-cyan {
-  width: 500px;
-  height: 500px;
+  width: 450px;
+  height: 450px;
   background: var(--cyan-primary);
   top: -100px;
   left: 15%;
 }
 .glow-magenta {
-  width: 550px;
-  height: 550px;
+  width: 480px;
+  height: 480px;
   background: var(--magenta-primary);
   bottom: -150px;
   right: 15%;
@@ -115,6 +119,7 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+  transform: translateZ(0);
 }
 
 /* Contenedor Principal */
@@ -502,14 +507,17 @@ body {
 .neon-range {
   width: 100%;
   -webkit-appearance: none;
+  appearance: none;
   background: rgba(255, 255, 255, 0.1);
   height: 6px;
   border-radius: 3px;
   outline: none;
 }
 
+/* WebKit / Chromium / Safari / Android */
 .neon-range::-webkit-slider-thumb {
   -webkit-appearance: none;
+  appearance: none;
   width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -526,6 +534,34 @@ body {
 }
 
 .neon-range::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+}
+
+/* Firefox / Gecko */
+.neon-range::-moz-range-track {
+  background: rgba(255, 255, 255, 0.1);
+  height: 6px;
+  border-radius: 3px;
+  border: none;
+}
+
+.neon-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--amber-warning);
+  cursor: pointer;
+  box-shadow: var(--amber-glow);
+  border: 2px solid #fff;
+  transition: transform 0.1s;
+}
+
+.neon-range.range-cyan::-moz-range-thumb {
+  background: var(--cyan-primary);
+  box-shadow: var(--cyan-glow);
+}
+
+.neon-range::-moz-range-thumb:hover {
   transform: scale(1.25);
 }
 
@@ -956,19 +992,182 @@ body {
   to { opacity: 1; }
 }
 
-/* Responsive Breakpoints */
+/* ==========================================================================
+   BARRA DE PESTAÑAS MÓVILES (Android / iOS / Pantallas Reducidas)
+   ========================================================================== */
+.mobile-tabs-bar {
+  display: none;
+  height: 48px;
+  background: rgba(8, 14, 28, 0.95);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--border-neon-cyan);
+  padding: 4px 8px;
+  gap: 6px;
+  z-index: 45;
+}
+
+.mobile-tab-btn {
+  flex: 1;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-family: var(--font-hud);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  touch-action: manipulation;
+}
+
+.mobile-tab-btn .tab-icon {
+  font-size: 0.9rem;
+}
+
+.mobile-tab-btn.active {
+  background: rgba(0, 240, 255, 0.2);
+  border-color: var(--cyan-primary);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+}
+
+/* ==========================================================================
+   RESPONSIVE BREAKPOINTS Y OPTIMIZACIONES MOBILE / ANDROID
+   ========================================================================== */
 @media (max-width: 1200px) {
   .hud-main {
-    grid-template-columns: 280px 1fr 300px;
-  }
-}
-@media (max-width: 900px) {
-  .hud-main {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 400px auto;
-    overflow-y: auto;
+    grid-template-columns: 290px 1fr 310px;
   }
   .hud-telemetry-strip {
+    gap: 10px;
+    padding: 4px 10px;
+  }
+  .telem-cell .value {
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 960px) {
+  #quantum-app {
+    height: 100dvh;
+  }
+
+  .hud-header {
+    height: auto;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .logo-glitch {
+    font-size: 1.15rem;
+  }
+  .sub-tag {
+    font-size: 0.58rem;
+  }
+
+  /* Ocultar telemetría superior en pantallas pequeñas para dar aire */
+  .hud-telemetry-strip {
+    order: 3;
+    width: 100%;
+    justify-content: space-around;
+    padding: 4px 8px;
+    margin-top: 4px;
+  }
+
+  .hud-actions {
+    gap: 6px;
+  }
+  .hud-btn {
+    padding: 6px 10px;
+    font-size: 0.7rem;
+  }
+
+  /* Mostrar barra de pestañas táctiles */
+  .mobile-tabs-bar {
+    display: flex;
+  }
+
+  .hud-main {
+    display: block;
+    position: relative;
+    height: calc(100dvh - 115px);
+    padding: 8px;
+    overflow: hidden;
+  }
+
+  /* Paneles laterales ocupan el viewport completo como vistas activas */
+  .hud-sidebar {
     display: none;
+    height: 100%;
+    width: 100%;
+    border-radius: 6px;
+  }
+
+  .hud-sidebar.mobile-active-view {
+    display: flex;
+  }
+
+  .hud-viewport {
+    display: none;
+    height: 100%;
+    width: 100%;
+    border-radius: 6px;
+  }
+
+  .hud-viewport.mobile-active-view {
+    display: block;
+  }
+
+  /* Controles flotantes en pantalla táctil con mayor área de toque (tap target) */
+  .icon-hud-btn {
+    width: 42px;
+    height: 42px;
+    font-size: 1.25rem;
+    touch-action: manipulation;
+  }
+
+  .viewport-hud-controls {
+    top: 10px;
+    left: 10px;
+    gap: 6px;
+  }
+
+  .hologram-legend {
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    font-size: 0.62rem;
+    padding: 6px 10px;
+  }
+
+  .readout-huge {
+    font-size: 1.85rem;
+  }
+
+  .hud-modal-content {
+    padding: 14px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 580px) {
+  .hud-telemetry-strip {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+  .badge-critical {
+    max-width: 130px;
+  }
+  .form-row {
+    flex-direction: column;
+    gap: 8px;
   }
 }

@@ -65,6 +65,19 @@
       </div>
     </header>
 
+    <!-- Barra de Pestañas Móviles / Responsive Navigation Bar -->
+    <nav class="mobile-tabs-bar" id="mobile-tabs">
+      <button class="mobile-tab-btn" data-target="sidebar-activities">
+        <span class="tab-icon">📋</span> ACTIVIDADES
+      </button>
+      <button class="mobile-tab-btn active" data-target="viewport-container">
+        <span class="tab-icon">🌌</span> HOLOGRAMA 3D
+      </button>
+      <button class="mobile-tab-btn" data-target="sidebar-oracle">
+        <span class="tab-icon">🔮</span> ORÁCULO
+      </button>
+    </nav>
+
     <!-- Contenedor Principal: Workspace y Paneles Laterales -->
     <main class="hud-main">
       <!-- Panel Lateral Izquierdo: Matriz de Actividades y Modo Editor -->
@@ -101,6 +114,8 @@
         <!-- Controles Flotantes del Viewport -->
         <div class="viewport-hud-controls">
           <button id="btn-recenter" class="icon-hud-btn" title="Centrar Topología e Inclinación 3D">🎯</button>
+          <button id="btn-zoom-in" class="icon-hud-btn" title="Acercar Zoom Cuántico (Zoom In)">➕</button>
+          <button id="btn-zoom-out" class="icon-hud-btn" title="Alejar Zoom Cuántico (Zoom Out)">➖</button>
           <button id="btn-auto-layout" class="icon-hud-btn" title="Reorganizar Grafo en Capas">⚡</button>
           <button id="btn-toggle-particles" class="icon-hud-btn active" title="Alternar Fotones Cuánticos">✨</button>
           <button id="btn-toggle-chromatic" class="icon-hud-btn active" title="Alternar Aberración Cromática RGB">🌈</button>
