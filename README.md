@@ -35,17 +35,3 @@ Aplicación web 100% client-side (sin backend, lista para desplegar en **GitHub 
    - Permite compartir cualquier proyecto complejo generando un enlace permanente (`#eyJhY3...`) sin necesidad de base de datos ni servidor.
 
 ---
-
-## 🚀 Despliegue en GitHub Pages
-
-1. Sube los archivos del repositorio a GitHub:
-   - `index.html`
-   - `style.css`
-   - `engine.js`
-   - `oracle.js`
-   - `canvas.js`
-   - `audio.js`
-   - `app.js`
-2. En GitHub ve a **Settings > Pages**.
-3. En **Source**, selecciona `Deploy from a branch` y elige la rama `main` (carpeta `/root`).
-4. ¡Tu aplicación estará en vivo al instante en `https://<tu-usuario>.github.io/<tu-repo>/`!
