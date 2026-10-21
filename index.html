@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CHRONOS // QUANTUM PERT & CPM HUD NEXUS</title>
+  <meta name="description" content="Simulador Cuántico de PERT / CPM con interfaz holográfica WebGL, cálculo topológico en tiempo real, análisis de holguras dinámico y oráculo probabilístico.">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+  
+  <!-- Estilos del Sistema Neón / Cyberpunk HUD -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Librerías de Audio / Utilitarios si se requieren (Web Audio API es nativo) -->
+</head>
+<body>
+  <div id="quantum-app">
+    <!-- Overlay de Efectos CRT / Scanlines / Viñeta -->
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+    <div class="glow-orb glow-cyan"></div>
+    <div class="glow-orb glow-magenta"></div>
+
+    <!-- Barra Superior / HUD Header -->
+    <header class="hud-header">
+      <div class="hud-brand">
+        <div class="logo-glitch" data-text="CHRONOS-NEXUS">CHRONOS-NEXUS</div>
+        <div class="sub-tag">QUANTUM PERT/CPM TOPOLOGICAL ENGINE // v4.09b</div>
+      </div>
+
+      <!-- Telemetría Global Rápida -->
+      <div class="hud-telemetry-strip">
+        <div class="telem-cell" id="telem-duration">
+          <span class="label">TE PROYECTO (DURACIÓN)</span>
+          <span class="value cyan-glow" id="stat-project-te">0.00 <span class="unit">días</span></span>
+        </div>
+        <div class="telem-cell" id="telem-sigma">
+          <span class="label">SIGMA CUÁNTICO (σ)</span>
+          <span class="value magenta-glow" id="stat-project-sigma">0.00</span>
+        </div>
+        <div class="telem-cell" id="telem-variance">
+          <span class="label">VARIANZA (σ²)</span>
+          <span class="value yellow-glow" id="stat-project-variance">0.00</span>
+        </div>
+        <div class="telem-cell" id="telem-critical">
+          <span class="label">RUTA CRÍTICA</span>
+          <span class="value badge-critical" id="stat-critical-path">N/A</span>
+        </div>
+      </div>
+
+      <!-- Acciones de Cabecera -->
+      <div class="hud-actions">
+        <button id="btn-audio-toggle" class="hud-btn neon-pulse" title="Alternar Sintetizador UI WebAudio">
+          <span class="icon">🔊</span> AUDIO: <span id="audio-status">FX ON</span>
+        </button>
+        <button id="btn-share-url" class="hud-btn hud-btn-primary" title="Exportar Hash a Portapapeles">
+          <span class="icon">🔗</span> COMPARTIR URL
+        </button>
+        <button id="btn-add-activity" class="hud-btn hud-btn-accent" title="Agregar Nueva Actividad Cuántica">
+          <span class="icon">+</span> NUEVA ACT
+        </button>
+      </div>
+    </header>
+
+    <!-- Contenedor Principal: Workspace y Paneles Laterales -->
+    <main class="hud-main">
+      <!-- Panel Lateral Izquierdo: Matriz de Actividades y Modo Editor -->
+      <aside class="hud-sidebar hud-panel glassmorphism" id="sidebar-activities">
+        <div class="panel-header">
+          <div class="panel-title"><span class="neon-bullet">■</span> MATRIZ DE ACTIVIDADES</div>
+          <div class="panel-sub-actions">
+            <button id="btn-load-preset-1" class="mini-btn" title="Cargar Proyecto Espacial Orbital">SAT-ORBIT</button>
+            <button id="btn-load-preset-2" class="mini-btn" title="Cargar Proyecto Reactor Fusión">REACTOR</button>
+            <button id="btn-clear-all" class="mini-btn danger" title="Vaciar Red">LIMPIAR</button>
+          </div>
+        </div>
+
+        <div class="activities-scroll-area" id="activity-cards-container">
+          <!-- Tarjetas de Actividades generadas dinámicamente -->
+        </div>
+
+        <!-- Chaos Monkey Slider Global -->
+        <div class="chaos-monkey-section">
+          <div class="chaos-label">
+            <span>👾 SIMULADOR DE CAOS (CHAOS MONKEY)</span>
+            <span id="chaos-val" class="yellow-glow">+0.0d</span>
+          </div>
+          <input type="range" id="chaos-slider" min="0" max="15" step="0.5" value="0" class="neon-range range-amber">
+          <div class="chaos-desc">Inyecta micro-entropía aleatoria en las actividades para probar resiliencia del camino crítico.</div>
+        </div>
+      </aside>
+
+      <!-- Lienzo Central: WebGL / 2D Holográfico con Shaders y Rayos de Plasma -->
+      <section class="hud-viewport" id="viewport-container">
+        <!-- Canvas Interactivo con Partículas y Grafos de Plasma -->
+        <canvas id="quantum-canvas"></canvas>
+
+        <!-- Controles Flotantes del Viewport -->
+        <div class="viewport-hud-controls">
+          <button id="btn-recenter" class="icon-hud-btn" title="Centrar Topología">🎯</button>
+          <button id="btn-auto-layout" class="icon-hud-btn" title="Reorganizar Grafo">⚡</button>
+          <button id="btn-toggle-particles" class="icon-hud-btn active" title="Alternar Fotones Cuánticos">✨</button>
+        </div>
+
+        <!-- Leyenda Flotante Holográfica -->
+        <div class="hologram-legend glassmorphism">
+          <div class="legend-item"><span class="legend-dot dot-critical"></span> RUTA CRÍTICA (HOLGURA = 0)</div>
+          <div class="legend-item"><span class="legend-dot dot-subcritical"></span> HOLGURA MEDIA / AMBAR</div>
+          <div class="legend-item"><span class="legend-dot dot-safe"></span> HOLGURA ALTA (CIAN)</div>
+          <div class="legend-item"><span class="legend-stream"></span> FLUJO FOTÓNICO DE PLASMA</div>
+        </div>
+      </section>
+
+      <!-- Panel Lateral Derecho: Oráculo Probabilístico y Telemetría Detallada -->
+      <aside class="hud-sidebar hud-sidebar-right hud-panel glassmorphism" id="sidebar-oracle">
+        <!-- Oráculo Probabilístico: Campana de Gauss Holográfica -->
+        <div class="panel-header">
+          <div class="panel-title"><span class="neon-bullet">■</span> ORÁCULO PROBABILÍSTICO (PERT)</div>
+        </div>
+
+        <div class="oracle-body">
+          <div class="oracle-formula">
+            <span class="math">Z = (T<sub>meta</sub> - T<sub>total</sub>) / σ</span>
+          </div>
+
+          <!-- Canvas de Campana de Gauss Dinámica -->
+          <div class="gauss-canvas-wrapper">
+            <canvas id="gauss-canvas" width="340" height="180"></canvas>
+            <div id="gauss-cursor-info" class="gauss-marker-tooltip"></div>
+          </div>
+
+          <!-- Controles del Oráculo -->
+          <div class="oracle-controls">
+            <div class="slider-control-group">
+              <div class="slider-header">
+                <span>TIEMPO OBJETIVO PROYECTADO (T<sub>meta</sub>):</span>
+                <span id="oracle-target-display" class="cyan-glow">0.0 días</span>
+              </div>
+              <input type="range" id="oracle-target-slider" min="1" max="100" step="0.5" value="25" class="neon-range range-cyan">
+            </div>
+
+            <!-- Lectura de Probabilidad Holográfica Gigante -->
+            <div class="oracle-readout-card">
+              <div class="readout-label">PROBABILIDAD CUÁNTICA DE CUMPLIMIENTO P(T ≤ T<sub>meta</sub>)</div>
+              <div class="readout-huge" id="oracle-prob-display">50.00%</div>
+              <div class="readout-sub" id="oracle-z-display">Puntaje Cuántico Z: 0.00σ</div>
+              <div class="oracle-verdict" id="oracle-verdict">TIEMPO ESTIMADO PROBABLE</div>
+            </div>
+          </div>
+
+          <!-- Tabla Resumen de Nodos y Holguras -->
+          <div class="telemetry-table-wrapper">
+            <div class="panel-header sub-table-header">
+              <div class="panel-title"><span class="neon-bullet">■</span> TELEMETRÍA ES / EF / LS / LF</div>
+            </div>
+            <div class="table-scroll">
+              <table class="hud-table" id="hud-metrics-table">
+                <thead>
+                  <tr>
+                    <th>ACT</th>
+                    <th>Te</th>
+                    <th>ES</th>
+                    <th>EF</th>
+                    <th>LS</th>
+                    <th>LF</th>
+                    <th>HOLG</th>
+                  </tr>
+                </thead>
+                <tbody id="hud-table-body">
+                  <!-- Filas dinámicas -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </aside>
+    </main>
+
+    <!-- Modal Holográfico para Edición / Creación de Actividades -->
+    <div class="hud-modal-overlay" id="activity-modal">
+      <div class="hud-modal-content glassmorphism">
+        <div class="modal-header">
+          <div class="modal-title" id="modal-heading">CONFIGURAR ACTIVIDAD CUÁNTICA</div>
+          <button class="modal-close" id="modal-close-btn">&times;</button>
+        </div>
+        <form id="activity-form" class="hud-form">
+          <input type="hidden" id="form-act-original-id">
+
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="form-act-id">IDENTIFICADOR (ID):</label>
+              <input type="text" id="form-act-id" required placeholder="Ej: ACT-01" class="hud-input">
+            </div>
+            <div class="form-group flex-2">
+              <label for="form-act-name">NOMBRE O DESCRIPCIÓN:</label>
+              <input type="text" id="form-act-name" required placeholder="Ej: Ensamblaje de Núcleo" class="hud-input">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="form-act-mode">MÉTODO DE CÁLCULO:</label>
+              <select id="form-act-mode" class="hud-select">
+                <option value="PERT">PERT (Probabilístico Beta: O, M, P)</option>
+                <option value="CPM">CPM (Determinista: Tiempo Fijo)</option>
+              </select>
+            </div>
+            <div class="form-group flex-1">
+              <label for="form-act-preds">PREDECESORAS (separadas por coma):</label>
+              <input type="text" id="form-act-preds" placeholder="Ej: ACT-01, ACT-02" class="hud-input">
+            </div>
+          </div>
+
+          <!-- Campos PERT -->
+          <div id="fields-pert" class="form-row pert-fields-row">
+            <div class="form-group flex-1">
+              <label for="form-act-opt">OPTIMISTA (O):</label>
+              <input type="number" step="0.1" min="0" id="form-act-opt" class="hud-input" value="2">
+            </div>
+            <div class="form-group flex-1">
+              <label for="form-act-prob">MÁS PROBABLE (M):</label>
+              <input type="number" step="0.1" min="0" id="form-act-prob" class="hud-input" value="4">
+            </div>
+            <div class="form-group flex-1">
+              <label for="form-act-pes">PESIMISTA (P):</label>
+              <input type="number" step="0.1" min="0" id="form-act-pes" class="hud-input" value="8">
+            </div>
+          </div>
+
+          <!-- Campos CPM -->
+          <div id="fields-cpm" class="form-row cpm-fields-row" style="display:none;">
+            <div class="form-group flex-1">
+              <label for="form-act-fixed">DURACIÓN DETERMINISTA (TIEMPO FIJO):</label>
+              <input type="number" step="0.1" min="0" id="form-act-fixed" class="hud-input" value="5">
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" id="btn-modal-delete" class="hud-btn danger" style="display:none;">ELIMINAR</button>
+            <div class="flex-spacer"></div>
+            <button type="button" id="btn-modal-cancel" class="hud-btn">CANCELAR</button>
+            <button type="submit" class="hud-btn hud-btn-accent">SINCRONIZAR A LA RED</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Notificación Holográfica Flotante (Toast) -->
+    <div id="hud-toast" class="hud-toast">
+      <div class="toast-indicator"></div>
+      <div class="toast-message" id="toast-text">MENSAJE DEL SISTEMA</div>
+    </div>
+  </div>
+
+  <!-- Scripts: Motor Algorítmico, Sintetizador de Audio, Motor Canvas y Oráculo -->
+  <script src="audio.js"></script>
+  <script src="engine.js"></script>
+  <script src="oracle.js"></script>
+  <script src="canvas.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

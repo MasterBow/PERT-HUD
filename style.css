@@ -1,0 +1,974 @@
+/* ==========================================================================
+   CHRONOS // QUANTUM CYBERPUNK HUD DESIGN SYSTEM
+   Paleta: Cian Holográfico (#00f0ff), Magenta Plasma (#ff0055),
+           Ámbar Cuántico (#ffb700), Fondo Abisal (#04050d)
+   ========================================================================== */
+
+:root {
+  --bg-deep: #04050d;
+  --bg-surface: rgba(9, 14, 28, 0.75);
+  --bg-surface-elevated: rgba(15, 23, 42, 0.85);
+  --border-neon-cyan: rgba(0, 240, 255, 0.45);
+  --border-neon-magenta: rgba(255, 0, 85, 0.65);
+  --border-subtle: rgba(0, 240, 255, 0.15);
+  
+  --cyan-primary: #00f0ff;
+  --cyan-glow: 0 0 12px rgba(0, 240, 255, 0.7), 0 0 25px rgba(0, 240, 255, 0.3);
+  
+  --magenta-primary: #ff0055;
+  --magenta-glow: 0 0 14px rgba(255, 0, 85, 0.8), 0 0 30px rgba(255, 0, 85, 0.4);
+
+  --amber-warning: #ffb700;
+  --amber-glow: 0 0 12px rgba(255, 183, 0, 0.7);
+
+  --text-primary: #e0f2fe;
+  --text-secondary: #94a3b8;
+  --text-muted: #475569;
+  
+  --font-hud: 'Orbitron', 'Rajdhani', sans-serif;
+  --font-body: 'Rajdhani', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --glass-blur: blur(16px);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+
+body {
+  background-color: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Efectos de Pantalla Holográfica CRT / Scanlines */
+.scanlines {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.35) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.02),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.02)
+  );
+  background-size: 100% 3px, 6px 100%;
+  z-index: 999;
+  opacity: 0.7;
+}
+
+.vignette {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+  z-index: 998;
+}
+
+/* Resplandores ambientales de fondo */
+.glow-orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(140px);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.25;
+}
+.glow-cyan {
+  width: 500px;
+  height: 500px;
+  background: var(--cyan-primary);
+  top: -100px;
+  left: 15%;
+}
+.glow-magenta {
+  width: 550px;
+  height: 550px;
+  background: var(--magenta-primary);
+  bottom: -150px;
+  right: 15%;
+}
+
+/* Glassmorphism Reutilizable */
+.glassmorphism {
+  background: var(--bg-surface);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+}
+
+/* Contenedor Principal */
+#quantum-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+  z-index: 10;
+}
+
+/* ==========================================================================
+   CABECERA HUD SUPERIOR
+   ========================================================================== */
+.hud-header {
+  height: 64px;
+  background: rgba(6, 10, 22, 0.85);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--border-neon-cyan);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  box-shadow: 0 4px 20px rgba(0, 240, 255, 0.15);
+  z-index: 50;
+}
+
+.hud-brand {
+  display: flex;
+  flex-direction: column;
+}
+
+.logo-glitch {
+  font-family: var(--font-hud);
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: 2.5px;
+  color: #fff;
+  text-shadow: 0 0 10px var(--cyan-primary), 0 0 20px var(--cyan-primary);
+  position: relative;
+}
+
+.sub-tag {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--cyan-primary);
+  opacity: 0.8;
+  letter-spacing: 1px;
+}
+
+/* Tira de Telemetría Global */
+.hud-telemetry-strip {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(0, 10, 25, 0.6);
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 240, 255, 0.2);
+}
+
+.telem-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.telem-cell .label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+  letter-spacing: 1px;
+}
+
+.telem-cell .value {
+  font-family: var(--font-hud);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.unit {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.cyan-glow {
+  color: var(--cyan-primary);
+  text-shadow: var(--cyan-glow);
+}
+.magenta-glow {
+  color: var(--magenta-primary);
+  text-shadow: var(--magenta-glow);
+}
+.yellow-glow {
+  color: var(--amber-warning);
+  text-shadow: var(--amber-glow);
+}
+
+.badge-critical {
+  font-size: 0.85rem !important;
+  color: #fff;
+  background: rgba(255, 0, 85, 0.2);
+  border: 1px solid var(--magenta-primary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(255, 0, 85, 0.4);
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Botones HUD */
+.hud-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hud-btn {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--border-neon-cyan);
+  color: var(--cyan-primary);
+  font-family: var(--font-hud);
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  padding: 8px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hud-btn:hover {
+  background: rgba(0, 240, 255, 0.2);
+  box-shadow: var(--cyan-glow);
+  transform: translateY(-1px);
+  color: #fff;
+}
+
+.hud-btn-accent {
+  border-color: var(--magenta-primary);
+  color: #fff;
+  background: rgba(255, 0, 85, 0.35);
+  box-shadow: 0 0 12px rgba(255, 0, 85, 0.4);
+}
+
+.hud-btn-accent:hover {
+  background: rgba(255, 0, 85, 0.6);
+  box-shadow: var(--magenta-glow);
+}
+
+.mini-btn {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-subtle);
+  color: var(--cyan-primary);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  padding: 3px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.mini-btn:hover {
+  border-color: var(--cyan-primary);
+  background: rgba(0, 240, 255, 0.2);
+}
+
+.mini-btn.danger {
+  color: #ff6b81;
+  border-color: rgba(255, 107, 129, 0.3);
+}
+.mini-btn.danger:hover {
+  background: rgba(255, 0, 85, 0.2);
+  border-color: var(--magenta-primary);
+}
+
+/* ==========================================================================
+   ESPACIO PRINCIPAL (SIDEBARS & VIEWPORT)
+   ========================================================================== */
+.hud-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 320px 1fr 340px;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+  height: calc(100vh - 64px);
+}
+
+.hud-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(0, 240, 255, 0.25);
+}
+
+.panel-header {
+  padding: 10px 14px;
+  background: rgba(0, 15, 30, 0.8);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-title {
+  font-family: var(--font-hud);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--cyan-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.neon-bullet {
+  color: var(--magenta-primary);
+  font-size: 0.7rem;
+  filter: drop-shadow(0 0 6px var(--magenta-primary));
+}
+
+.panel-sub-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* Lista de Actividades (Sidebar Izquierda) */
+.activities-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.activities-scroll-area::-webkit-scrollbar,
+.table-scroll::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.activities-scroll-area::-webkit-scrollbar-thumb,
+.table-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.3);
+  border-radius: 3px;
+}
+
+/* Tarjeta Holográfica de Actividad */
+.activity-card {
+  background: rgba(10, 18, 36, 0.65);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 10px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.activity-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--cyan-primary);
+  box-shadow: var(--cyan-glow);
+}
+
+.activity-card.is-critical {
+  border-color: rgba(255, 0, 85, 0.6);
+  background: rgba(30, 10, 20, 0.6);
+}
+
+.activity-card.is-critical::before {
+  background: var(--magenta-primary);
+  box-shadow: var(--magenta-glow);
+}
+
+.activity-card:hover {
+  transform: translateX(4px);
+  background: rgba(15, 27, 55, 0.85);
+  border-color: var(--cyan-primary);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.act-badge {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.act-type {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(0, 240, 255, 0.15);
+  color: var(--cyan-primary);
+}
+
+.act-name {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 6px;
+}
+
+.card-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 5px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-align: center;
+}
+
+.metric-box .m-lbl {
+  color: var(--text-muted);
+  display: block;
+}
+.metric-box .m-val {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.card-slack-bar {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.slack-indicator {
+  font-weight: 700;
+}
+
+/* Chaos Monkey Section */
+.chaos-monkey-section {
+  padding: 12px;
+  background: rgba(5, 8, 18, 0.9);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.chaos-label {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-hud);
+  font-size: 0.7rem;
+  margin-bottom: 6px;
+  color: var(--amber-warning);
+}
+
+.chaos-desc {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.2;
+}
+
+.neon-range {
+  width: 100%;
+  -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.1);
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+}
+
+.neon-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--amber-warning);
+  cursor: pointer;
+  box-shadow: var(--amber-glow);
+  border: 2px solid #fff;
+  transition: transform 0.1s;
+}
+
+.neon-range.range-cyan::-webkit-slider-thumb {
+  background: var(--cyan-primary);
+  box-shadow: var(--cyan-glow);
+}
+
+.neon-range::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+}
+
+/* ==========================================================================
+   VIEWPORT CENTRAL (CANVAS HOLOGRÁFICO)
+   ========================================================================== */
+.hud-viewport {
+  position: relative;
+  background: radial-gradient(circle at center, #091024 0%, #03050b 100%);
+  border: 1px solid var(--border-neon-cyan);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 240, 255, 0.15);
+}
+
+#quantum-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+}
+
+#quantum-canvas:active {
+  cursor: grabbing;
+}
+
+.viewport-hud-controls {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 20;
+}
+
+.icon-hud-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: rgba(10, 20, 38, 0.85);
+  border: 1px solid var(--border-neon-cyan);
+  color: var(--cyan-primary);
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+.icon-hud-btn:hover {
+  background: rgba(0, 240, 255, 0.25);
+  box-shadow: var(--cyan-glow);
+  transform: scale(1.08);
+}
+
+.icon-hud-btn.active {
+  border-color: var(--magenta-primary);
+  box-shadow: 0 0 10px rgba(255, 0, 85, 0.6);
+}
+
+.hologram-legend {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  padding: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  z-index: 20;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-critical {
+  background: var(--magenta-primary);
+  box-shadow: var(--magenta-glow);
+}
+.dot-subcritical {
+  background: var(--amber-warning);
+  box-shadow: var(--amber-glow);
+}
+.dot-safe {
+  background: var(--cyan-primary);
+  box-shadow: var(--cyan-glow);
+}
+
+.legend-stream {
+  width: 20px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--magenta-primary), transparent);
+}
+
+/* ==========================================================================
+   SIDEBAR DERECHA: ORÁCULO PROBABILÍSTICO Y TELEMETRÍA
+   ========================================================================== */
+.hud-sidebar-right {
+  display: flex;
+  flex-direction: column;
+}
+
+.oracle-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.oracle-formula {
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px dashed rgba(0, 240, 255, 0.3);
+  border-radius: 4px;
+  padding: 6px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--cyan-primary);
+}
+
+.gauss-canvas-wrapper {
+  position: relative;
+  background: rgba(5, 10, 22, 0.75);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+}
+
+#gauss-canvas {
+  width: 100%;
+  height: 150px;
+  display: block;
+}
+
+.oracle-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.slider-header {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-hud);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.oracle-readout-card {
+  background: rgba(12, 22, 45, 0.7);
+  border: 1px solid var(--border-neon-cyan);
+  border-radius: 6px;
+  padding: 12px;
+  text-align: center;
+  position: relative;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.readout-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+}
+
+.readout-huge {
+  font-family: var(--font-hud);
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: var(--cyan-primary);
+  text-shadow: var(--cyan-glow);
+  margin: 4px 0;
+}
+
+.readout-sub {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--amber-warning);
+}
+
+.oracle-verdict {
+  margin-top: 6px;
+  font-family: var(--font-hud);
+  font-size: 0.65rem;
+  letter-spacing: 1px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  display: inline-block;
+  background: rgba(0, 240, 255, 0.15);
+  color: #fff;
+}
+
+/* Tabla de Telemetría Detallada */
+.telemetry-table-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+  min-height: 180px;
+}
+
+.sub-table-header {
+  padding: 6px 10px;
+}
+
+.table-scroll {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.hud-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-align: left;
+}
+
+.hud-table th {
+  background: rgba(0, 20, 45, 0.85);
+  color: var(--cyan-primary);
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.hud-table td {
+  padding: 5px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+}
+
+.hud-table tr.row-critical td {
+  color: #ff99bb;
+  background: rgba(255, 0, 85, 0.08);
+}
+
+.hud-table tr:hover td {
+  background: rgba(0, 240, 255, 0.12);
+  color: #fff;
+}
+
+/* ==========================================================================
+   MODAL HOLOGRÁFICO
+   ========================================================================== */
+.hud-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(3, 5, 12, 0.85);
+  backdrop-filter: blur(8px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.hud-modal-overlay.active {
+  display: flex;
+}
+
+.hud-modal-content {
+  width: 520px;
+  max-width: 95vw;
+  background: rgba(10, 16, 32, 0.95);
+  border: 1px solid var(--cyan-primary);
+  box-shadow: var(--cyan-glow), 0 20px 50px rgba(0, 0, 0, 0.9);
+  padding: 20px;
+  position: relative;
+  animation: modalIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.92) translateY(-20px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-neon-cyan);
+  padding-bottom: 10px;
+  margin-bottom: 16px;
+}
+
+.modal-title {
+  font-family: var(--font-hud);
+  font-size: 0.95rem;
+  letter-spacing: 1.5px;
+  color: var(--cyan-primary);
+  text-shadow: var(--cyan-glow);
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--cyan-primary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: var(--magenta-primary);
+}
+
+.hud-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.flex-1 { flex: 1; }
+.flex-2 { flex: 2; }
+.flex-spacer { flex: 1; }
+
+.form-group label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.hud-input,
+.hud-select {
+  width: 100%;
+  background: rgba(5, 10, 24, 0.85);
+  border: 1px solid var(--border-neon-cyan);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  outline: none;
+  transition: all 0.2s;
+}
+
+.hud-input:focus,
+.hud-select:focus {
+  border-color: var(--magenta-primary);
+  box-shadow: 0 0 10px rgba(255, 0, 85, 0.4);
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  margin-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 14px;
+  gap: 10px;
+}
+
+/* ==========================================================================
+   TOAST HOLOGRÁFICO
+   ========================================================================== */
+.hud-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: rgba(10, 16, 32, 0.95);
+  border: 1px solid var(--cyan-primary);
+  box-shadow: var(--cyan-glow);
+  padding: 12px 20px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 2000;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: #fff;
+  transform: translateY(100px);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+.hud-toast.active {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.toast-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cyan-primary);
+  box-shadow: var(--cyan-glow);
+  animation: pulseToast 1s infinite alternate;
+}
+
+@keyframes pulseToast {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1200px) {
+  .hud-main {
+    grid-template-columns: 280px 1fr 300px;
+  }
+}
+@media (max-width: 900px) {
+  .hud-main {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 400px auto;
+    overflow-y: auto;
+  }
+  .hud-telemetry-strip {
+    display: none;
+  }
+}
