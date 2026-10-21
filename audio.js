@@ -147,6 +147,62 @@ class QuantumAudio {
   }
 
   /**
+   * Pulso acústico de patrulla JARVIS cuando la entidad arriba a un nodo crítico
+   */
+  playPatrolBeep(isCritical = true) {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+
+    try {
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(isCritical ? 1760 : 1320, now); // A6 or E6
+      osc.frequency.exponentialRampToValueAtTime(isCritical ? 2640 : 1760, now + 0.06);
+
+      gain.gain.setValueAtTime(0.04, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.08);
+    } catch (e) {}
+  }
+
+  /**
+   * Alarma rápida cuando la entidad JARVIS entra en Modo Alerta
+   */
+  playAlertEngage() {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+
+    try {
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.linearRampToValueAtTime(880, now + 0.12);
+
+      gain.gain.setValueAtTime(0.05, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.15);
+    } catch (e) {}
+  }
+
+  /**
    * Destello Cuántico: Cuando un nodo no crítico consume toda su holgura y se vuelve crítico
    */
   playCriticalExplosion() {

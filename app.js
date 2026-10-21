@@ -89,6 +89,7 @@ class ChronosApp {
       btnRecenter: document.getElementById('btn-recenter'),
       btnAutoLayout: document.getElementById('btn-auto-layout'),
       btnToggleParticles: document.getElementById('btn-toggle-particles'),
+      btnToggleChromatic: document.getElementById('btn-toggle-chromatic'),
 
       // Toast
       toast: document.getElementById('hud-toast'),
@@ -182,6 +183,13 @@ class ChronosApp {
       this.dom.btnToggleParticles.classList.toggle('active', this.renderer.particlesEnabled);
       if (window.quantumAudio) window.quantumAudio.playClick();
     });
+    if (this.dom.btnToggleChromatic) {
+      this.dom.btnToggleChromatic.addEventListener('click', () => {
+        this.renderer.chromaticEnabled = !this.renderer.chromaticEnabled;
+        this.dom.btnToggleChromatic.classList.toggle('active', this.renderer.chromaticEnabled);
+        if (window.quantumAudio) window.quantumAudio.playClick();
+      });
+    }
 
     // Modal Crear / Editar
     this.dom.btnAdd.addEventListener('click', () => this.openCreateModal());
@@ -251,16 +259,23 @@ class ChronosApp {
         : []
     );
 
+    let delayedAct = null;
+    let maxDelay = 0;
+
     this.actividades.forEach(act => {
       // Inyección caótica ponderada por ID hash para consistencia
       const charCode = act.id.charCodeAt(0) || 1;
       const weight = (charCode % 5) / 5;
       act.retraso_caos = this.chaosEntropy * weight;
+      if (act.retraso_caos > maxDelay) {
+        maxDelay = act.retraso_caos;
+        delayedAct = act;
+      }
     });
 
     this.recalculate();
 
-    // Comprobar si cambió la ruta crítica
+    // Comprobar si cambió la ruta crítica o si se inyectó caos apreciable
     if (this.resultadoActual && this.resultadoActual.ruta_critica) {
       const newCritical = new Set(this.resultadoActual.ruta_critica.map(a => a.id));
       for (const id of newCritical) {
@@ -269,6 +284,11 @@ class ChronosApp {
           break;
         }
       }
+    }
+
+    // Activar Modo Alerta de la Luz JARVIS
+    if (this.chaosEntropy > 0 && delayedAct && this.renderer) {
+      this.renderer.triggerAlert(delayedAct);
     }
 
     if (causedCriticalShift && window.quantumAudio) {

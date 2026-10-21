@@ -1,21 +1,37 @@
 /**
- * CHRONOS // QUANTUM CANVAS & HOLOGRAPHIC GRAPH RENDERER
- * Motor de renderizado en Canvas 2D acelerado con resplandores de neón,
- * cápsulas holográficas reactivas, rayos de plasma con fotones cuánticos en ruta crítica,
- * zoom/pan y soporte para arrastrar nodos libremente.
+ * CHRONOS // QUANTUM CANVAS & HOLOGRAPHIC GRAPH RENDERER 3.0
+ * 
+ * Capa A - El Vacío: Partículas cósmicas profundas flotantes con parallax orgánico.
+ * Capa B - Rejilla Fantasma 3D: Perspectiva infinita con desplazamiento z continuo y fade en bordes.
+ * Capa C - Efecto Holograma: Aberración cromática RGB, Fresnel Glow en nodos, Scanline interactivo & flicker.
+ * Capa D - Nodos como Proyectores de Luz: Pilares volumétricos de luz proporcionales a Te.
+ * Capa E - Rotación Holográfica 3D (JARVIS HUD): Manipulación orbital con mouse (pitch & yaw).
+ * Capa F - Entidad de Luz JARVIS IA: Patrulla continua sobre el camino crítico con cola de plasma
+ *          y Modo Alerta con velocidad acelerada hacia nodos perturbados por el Chaos Monkey.
  */
 
 class QuantumCanvasRenderer {
   constructor(canvasId) {
     this.canvas = document.getElementById(canvasId);
     this.ctx = this.canvas.getContext('2d');
+
+    // Canvas secundario para el pase de Aberración Cromática y Post-procesado Holográfico
+    this.offscreenCanvas = document.createElement('canvas');
+    this.offscreenCtx = this.offscreenCanvas.getContext('2d');
     
-    // Transformaciones de cámara
+    // Transformaciones de cámara 3D (Manipulación tipo JARVIS)
     this.scale = 1.0;
-    this.panX = 60;
-    this.panY = 100;
-    this.isPanning = false;
-    this.startPan = { x: 0, y: 0 };
+    this.panX = 0;
+    this.panY = 0;
+    this.rotX = 0.35; // Ángulo de inclinación (Pitch)
+    this.rotY = 0.0;  // Ángulo de rotación (Yaw)
+    this.targetRotX = 0.35;
+    this.targetRotY = 0.0;
+
+    // Estado del mouse e interacción
+    this.isOrbiting = false; // Botón derecho o arrastre libre
+    this.isPanning = false;  // Cuando se presiona shift o drag de fondo
+    this.startMouse = { x: 0, y: 0 };
 
     // Estado del Grafo
     this.actividades = [];
@@ -25,19 +41,62 @@ class QuantumCanvasRenderer {
     this.draggedNode = null;
     this.dragOffset = { x: 0, y: 0 };
 
-    // Sistema de Partículas (Fotones Cuánticos sobre aristas)
+    // Capa A: Polvo Cósmico / Partículas Profundas en el Vacío
+    this.ambientParticles = [];
+    this.initAmbientParticles();
+
+    // Capa B: Rejilla en Perspectiva Infinita
+    this.gridZOffset = 0;
+
+    // Capa C: Efecto Holograma (Aberración Cromática y Scanline Sweep)
+    this.chromaticEnabled = true;
+    this.scanlineY = 0;
+    this.flickerAlpha = 1.0;
+    this.lastFlickerTime = 0;
+
+    // Fotones Cuánticos en aristas
     this.particles = [];
     this.particlesEnabled = true;
-    this.lastTime = performance.now();
+
+    // Capa F: Entidad de Luz JARVIS IA
+    this.jarvisLight = {
+      x: 0,
+      y: 0,
+      z: 0,
+      currentNodeIndex: 0,
+      progress: 0,
+      speed: 0.015,
+      trail: [], // Cola de plasma [ {x, y, z, alpha, size} ]
+      mode: 'PATROL', // 'PATROL' | 'ALERT'
+      alertTargetNode: null,
+      alertColor: '#ff0055',
+      patrolColor: '#00f0ff',
+      pulseIntensity: 0
+    };
 
     // Callbacks hacia la UI
     this.onNodeClick = null;
     this.onNodeHover = null;
-    this.onNodeTimeChange = null;
 
     this.initCanvasSize();
     this.bindEvents();
     this.startRenderLoop();
+  }
+
+  initAmbientParticles() {
+    this.ambientParticles = [];
+    const count = 75;
+    for (let i = 0; i < count; i++) {
+      this.ambientParticles.push({
+        x: (Math.random() - 0.5) * 1600,
+        y: (Math.random() - 0.5) * 1200,
+        z: Math.random() * 800 - 400,
+        vx: (Math.random() - 0.5) * 0.2,
+        vy: (Math.random() - 0.5) * 0.2 - 0.1,
+        size: Math.random() * 2 + 0.6,
+        alpha: Math.random() * 0.5 + 0.2
+      });
+    }
   }
 
   initCanvasSize() {
@@ -47,43 +106,71 @@ class QuantumCanvasRenderer {
     this.height = rect.height;
     this.canvas.width = this.width * dpr;
     this.canvas.height = this.height * dpr;
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.scale(dpr, dpr);
+
+    this.offscreenCanvas.width = this.canvas.width;
+    this.offscreenCanvas.height = this.canvas.height;
+    this.offscreenCtx.setTransform(1, 0, 0, 1, 0, 0);
+    this.offscreenCtx.scale(dpr, dpr);
+
+    if (this.panX === 0 && this.panY === 0) {
+      this.panX = this.width / 2;
+      this.panY = this.height / 2 + 60;
+    }
   }
 
   bindEvents() {
     window.addEventListener('resize', () => this.initCanvasSize());
 
-    // Mouse Down (Arrastre de nodo o paneo de canvas)
+    // Mouse Down
     this.canvas.addEventListener('mousedown', (e) => {
-      const mouse = this.getCanvasCoords(e);
-      const clicked = this.getNodeAt(mouse.x, mouse.y);
+      const mouse = this.getScreenCoords(e);
+      const clicked = this.getNodeAtScreen(mouse.x, mouse.y);
 
-      if (clicked) {
+      if (clicked && e.button === 0) {
+        // Clic en nodo -> seleccionar y arrastrar
         this.draggedNode = clicked;
-        this.dragOffset.x = mouse.x - clicked.x;
-        this.dragOffset.y = mouse.y - clicked.y;
+        const proj = this.project3D(clicked.x, clicked.y, 0);
+        this.dragOffset.x = mouse.x - proj.x;
+        this.dragOffset.y = mouse.y - proj.y;
         this.selectedNode = clicked;
         if (window.quantumAudio) window.quantumAudio.playClick();
         if (this.onNodeClick) this.onNodeClick(clicked);
       } else {
-        this.isPanning = true;
-        this.startPan.x = e.clientX - this.panX;
-        this.startPan.y = e.clientY - this.panY;
+        // Arrastrar fondo -> Rotación 3D tipo JARVIS
+        this.isOrbiting = true;
+        this.startMouse.x = e.clientX;
+        this.startMouse.y = e.clientY;
       }
     });
 
     // Mouse Move
     this.canvas.addEventListener('mousemove', (e) => {
-      const mouse = this.getCanvasCoords(e);
+      const mouse = this.getScreenCoords(e);
 
       if (this.draggedNode) {
-        this.draggedNode.x = mouse.x - this.dragOffset.x;
-        this.draggedNode.y = mouse.y - this.dragOffset.y;
-      } else if (this.isPanning) {
-        this.panX = e.clientX - this.startPan.x;
-        this.panY = e.clientY - this.startPan.y;
+        // Proyección inversa aproximada en el plano Z=0
+        const dx = (e.clientX - this.startMouse.x) / this.scale;
+        const dy = (e.clientY - this.startMouse.y) / this.scale;
+        this.draggedNode.x += dx * 0.7;
+        this.draggedNode.y += dy * 0.7;
+        this.startMouse.x = e.clientX;
+        this.startMouse.y = e.clientY;
+      } else if (this.isOrbiting) {
+        const deltaX = e.clientX - this.startMouse.x;
+        const deltaY = e.clientY - this.startMouse.y;
+        
+        // Rotación orbital del holograma
+        this.targetRotY += deltaX * 0.005;
+        this.targetRotX += deltaY * 0.005;
+        // Limitar pitch para que no se voltee completamente
+        this.targetRotX = Math.max(-0.2, Math.min(0.95, this.targetRotX));
+
+        this.startMouse.x = e.clientX;
+        this.startMouse.y = e.clientY;
       } else {
-        const hovered = this.getNodeAt(mouse.x, mouse.y);
+        const hovered = this.getNodeAtScreen(mouse.x, mouse.y);
         if (hovered !== this.hoveredNode) {
           this.hoveredNode = hovered;
           this.canvas.style.cursor = hovered ? 'pointer' : 'grab';
@@ -97,44 +184,74 @@ class QuantumCanvasRenderer {
 
     // Mouse Up
     window.addEventListener('mouseup', () => {
-      this.isPanning = false;
+      this.isOrbiting = false;
       this.draggedNode = null;
     });
 
-    // Rueda de ratón (Zoom)
+    // Zoom con rueda de ratón
     this.canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-      const mouse = { x: e.offsetX, y: e.offsetY };
-
-      // Zoom centrado en el puntero del cursor
-      const newScale = Math.min(Math.max(0.35, this.scale * zoomFactor), 2.5);
-      this.panX = mouse.x - (mouse.x - this.panX) * (newScale / this.scale);
-      this.panY = mouse.y - (mouse.y - this.panY) * (newScale / this.scale);
-      this.scale = newScale;
+      this.scale = Math.min(Math.max(0.4, this.scale * zoomFactor), 2.2);
     }, { passive: false });
+
+    // Deshabilitar menú contextual en el canvas para rotación libre
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
-  getCanvasCoords(e) {
+  getScreenCoords(e) {
     const rect = this.canvas.getBoundingClientRect();
-    const clientX = e.clientX - rect.left;
-    const clientY = e.clientY - rect.top;
     return {
-      x: (clientX - this.panX) / this.scale,
-      y: (clientY - this.panY) / this.scale
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
     };
   }
 
-  getNodeAt(x, y) {
-    const nodeW = 140;
-    const nodeH = 75;
+  /**
+   * Proyección 3D isométrica con rotación Euler (Pitch / Yaw) y perspectiva simulada
+   */
+  project3D(x, y, z = 0) {
+    // 1. Centrar respecto al origen del grafo
+    const cx = x - 450;
+    const cy = y - 250;
+    const cz = z;
+
+    // 2. Rotación Yaw (alrededor del eje Y vertical)
+    const cosY = Math.cos(this.rotY);
+    const sinY = Math.sin(this.rotY);
+    const x1 = cx * cosY - cz * sinY;
+    const z1 = cx * sinY + cz * cosY;
+
+    // 3. Rotación Pitch (alrededor del eje X horizontal)
+    const cosX = Math.cos(this.rotX);
+    const sinX = Math.sin(this.rotX);
+    const y2 = cy * cosX - z1 * sinX;
+    const z2 = cy * sinX + z1 * cosX;
+
+    // 4. Perspectiva cónica hacia la cámara (Fov)
+    const cameraDistance = 900;
+    const perspective = cameraDistance / (cameraDistance + z2);
+
+    return {
+      x: this.panX + x1 * perspective * this.scale,
+      y: this.panY + y2 * perspective * this.scale,
+      z: z2,
+      scale: perspective * this.scale
+    };
+  }
+
+  getNodeAtScreen(sx, sy) {
     for (let i = this.actividades.length - 1; i >= 0; i--) {
       const act = this.actividades[i];
+      const p = this.project3D(act.x, act.y, 0);
+      const w = 130 * p.scale;
+      const h = 70 * p.scale;
+
       if (
-        x >= act.x - nodeW / 2 &&
-        x <= act.x + nodeW / 2 &&
-        y >= act.y - nodeH / 2 &&
-        y <= act.y + nodeH / 2
+        sx >= p.x - w / 2 &&
+        sx <= p.x + w / 2 &&
+        sy >= p.y - h / 2 &&
+        sy <= p.y + h / 2
       ) {
         return act;
       }
@@ -142,13 +259,9 @@ class QuantumCanvasRenderer {
     return null;
   }
 
-  /**
-   * Disposición automática por capas topológicas (Layered DAG layout)
-   */
   autoLayout() {
     if (!this.actividades || this.actividades.length === 0) return;
 
-    // Agrupar por capa
     const layers = new Map();
     this.actividades.forEach(act => {
       const l = act.layer || 0;
@@ -156,14 +269,14 @@ class QuantumCanvasRenderer {
       layers.get(l).push(act);
     });
 
-    const colWidth = 230;
-    const rowHeight = 110;
+    const colWidth = 240;
+    const rowHeight = 130;
     const startX = 120;
-    const startY = 100;
+    const startY = 120;
 
     layers.forEach((actsInLayer, layerIndex) => {
       const totalH = actsInLayer.length * rowHeight;
-      const layerStartY = startY + (350 - totalH) / 2; // centrar verticalmente
+      const layerStartY = startY + (380 - totalH) / 2;
 
       actsInLayer.forEach((act, actIndex) => {
         act.x = startX + layerIndex * colWidth;
@@ -176,22 +289,23 @@ class QuantumCanvasRenderer {
 
   recenter() {
     this.scale = 1.0;
-    this.panX = 60;
-    this.panY = 60;
+    this.targetRotX = 0.35;
+    this.targetRotY = 0.0;
+    this.panX = this.width / 2;
+    this.panY = this.height / 2 + 40;
   }
 
   setGraphData(resultado) {
     this.resultado = resultado;
     this.actividades = resultado.grafo || [];
 
-    // Asignar coordenadas iniciales si no existen
-    let hasCoords = this.actividades.some(a => a.x !== null && a.y !== null);
+    const hasCoords = this.actividades.some(a => a.x !== null && a.y !== null);
     if (!hasCoords) {
       this.autoLayout();
     }
 
-    // Inicializar o sincronizar partículas de plasma
     this.syncParticles();
+    this.syncJarvisPatrol();
   }
 
   syncParticles() {
@@ -212,7 +326,7 @@ class QuantumCanvasRenderer {
               source: act,
               target: suc,
               progress: Math.random(),
-              speed: isCriticalEdge ? 0.007 + Math.random() * 0.005 : 0.003,
+              speed: isCriticalEdge ? 0.008 + Math.random() * 0.004 : 0.003,
               isCritical: isCriticalEdge,
               size: isCriticalEdge ? 3.5 : 2
             });
@@ -222,249 +336,609 @@ class QuantumCanvasRenderer {
     });
   }
 
+  /**
+   * Inicializa o reorienta la patrulla de la entidad JARVIS
+   */
+  syncJarvisPatrol() {
+    if (!this.resultado || !this.resultado.ruta_critica || this.resultado.ruta_critica.length === 0) {
+      return;
+    }
+    const criticalActs = this.resultado.ruta_critica;
+    if (this.jarvisLight.currentNodeIndex >= criticalActs.length) {
+      this.jarvisLight.currentNodeIndex = 0;
+    }
+  }
+
+  /**
+   * Activa el Modo Alerta de la Luz JARVIS cuando se inyecta entropía o cambia la red
+   */
+  triggerAlert(targetAct) {
+    this.jarvisLight.mode = 'ALERT';
+    this.jarvisLight.alertTargetNode = targetAct;
+    this.jarvisLight.speed = 0.045; // Acelera rápidamente
+    if (window.quantumAudio) {
+      window.quantumAudio.playAlertEngage();
+    }
+  }
+
   startRenderLoop() {
     const loop = (timestamp) => {
+      this.update(timestamp);
       this.render();
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
   }
 
+  update(timestamp) {
+    // 1. Suavizado lerp de rotación orbital 3D
+    this.rotX += (this.targetRotX - this.rotX) * 0.1;
+    this.rotY += (this.targetRotY - this.rotY) * 0.1;
+
+    // 2. Desplazamiento z continuo de la rejilla perspectiva infinita
+    this.gridZOffset = (this.gridZOffset + 0.45) % 40;
+
+    // 3. Partículas cósmicas profundas (Capa A)
+    this.ambientParticles.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.y < -600) p.y = 600;
+      if (p.x < -800) p.x = 800;
+      if (p.x > 800) p.x = -800;
+    });
+
+    // 4. Scanline sweep vertical y parpadeo aleatorio (Capa C)
+    this.scanlineY = (this.scanlineY + 3.5) % (this.height + 60);
+
+    // Flicker cada 3-4 segundos de 0.08s
+    if (timestamp - this.lastFlickerTime > 3200) {
+      if (Math.random() < 0.1) {
+        this.flickerAlpha = 0.88 + Math.random() * 0.1;
+        if (Math.random() < 0.3) this.lastFlickerTime = timestamp;
+      } else {
+        this.flickerAlpha = 1.0;
+      }
+    }
+
+    // 5. Actualizar Entidad de Luz JARVIS
+    this.updateJarvisLight();
+  }
+
+  updateJarvisLight() {
+    const critical = this.resultado && this.resultado.ruta_critica ? this.resultado.ruta_critica : [];
+    if (critical.length === 0) return;
+
+    let targetNode = null;
+    let startNode = null;
+
+    if (this.jarvisLight.mode === 'ALERT' && this.jarvisLight.alertTargetNode) {
+      // Modo Alerta: Vuela directamente hacia el nodo en peligro
+      targetNode = this.jarvisLight.alertTargetNode;
+      startNode = { x: this.jarvisLight.x, y: this.jarvisLight.y, Te: 5 };
+    } else {
+      // Modo Patrulla: Recorre la ruta crítica cíclicamente
+      const idx = this.jarvisLight.currentNodeIndex;
+      const nextIdx = (idx + 1) % critical.length;
+      startNode = critical[idx];
+      targetNode = critical[nextIdx];
+    }
+
+    if (!startNode || !targetNode) return;
+
+    this.jarvisLight.progress += this.jarvisLight.speed;
+
+    // Interpolación de posición con elevación hacia la columna de luz
+    const t = Math.min(1, this.jarvisLight.progress);
+    const easeT = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+
+    const currentX = startNode.x + (targetNode.x - startNode.x) * easeT;
+    const currentY = startNode.y + (targetNode.y - startNode.y) * easeT;
+    // La luz se eleva a la altura del pilar de luz (Te * 9)
+    const targetZ = -(targetNode.Te || 4) * 9;
+    const startZ = -(startNode.Te || 4) * 9;
+    const currentZ = startZ + (targetZ - startZ) * easeT;
+
+    this.jarvisLight.x = currentX;
+    this.jarvisLight.y = currentY;
+    this.jarvisLight.z = currentZ;
+
+    // Registrar rastro de la cola de plasma (hasta 22 posiciones previas)
+    this.jarvisLight.trail.unshift({
+      x: currentX,
+      y: currentY,
+      z: currentZ,
+      alpha: 1.0,
+      size: this.jarvisLight.mode === 'ALERT' ? 6 : 4.5
+    });
+    if (this.jarvisLight.trail.length > 22) {
+      this.jarvisLight.trail.pop();
+    }
+
+    // Llegó al nodo objetivo
+    if (this.jarvisLight.progress >= 1) {
+      this.jarvisLight.progress = 0;
+      this.jarvisLight.pulseIntensity = 1.0;
+
+      if (this.jarvisLight.mode === 'ALERT') {
+        // Pulso de inspección en nodo con retraso
+        if (window.quantumAudio) window.quantumAudio.playPatrolBeep(false);
+        // Regresa a modo patrulla normal
+        this.jarvisLight.mode = 'PATROL';
+        this.jarvisLight.speed = 0.015;
+        this.jarvisLight.alertTargetNode = null;
+      } else {
+        // Avanza en el circuito de patrulla
+        this.jarvisLight.currentNodeIndex = (this.jarvisLight.currentNodeIndex + 1) % critical.length;
+        if (window.quantumAudio) {
+          window.quantumAudio.playPatrolBeep(true);
+        }
+      }
+    }
+
+    if (this.jarvisLight.pulseIntensity > 0) {
+      this.jarvisLight.pulseIntensity = Math.max(0, this.jarvisLight.pulseIntensity - 0.05);
+    }
+  }
+
   render() {
-    this.ctx.clearRect(0, 0, this.width, this.height);
+    // Renderizamos la escena en el canvas offscreen
+    this.offscreenCtx.clearRect(0, 0, this.width, this.height);
 
-    // Dibujar Rejilla Holográfica de Fondo
-    this.drawHoloGrid();
+    // =========================================================================
+    // CAPA A: EL VACÍO CÓSMICO (Fondo negro azulado profundo con polvo de luz)
+    // =========================================================================
+    this.drawCosmicVoid(this.offscreenCtx);
 
-    this.ctx.save();
-    this.ctx.translate(this.panX, this.panY);
-    this.ctx.scale(this.scale, this.scale);
+    // =========================================================================
+    // CAPA B: LA REJILLA FANTASMA CON PERSPECTIVA INFINITA
+    // =========================================================================
+    this.drawInfiniteGrid(this.offscreenCtx);
 
+    // =========================================================================
+    // GRAFO HOLOGRÁFICO (MODO COMPOSICIÓN LUZ 'LIGHTER')
+    // =========================================================================
     const mapa = new Map();
     this.actividades.forEach(a => mapa.set(a.id, a));
 
-    // 1. Dibujar Conexiones y Rayos Láser de Plasma
+    // 1. Dibujar Pilares de Luz Holográficos (Altura = Te)
+    this.drawHoloLightPillars(this.offscreenCtx);
+
+    // 2. Dibujar Enlaces de Rayos de Plasma y Fibras Ópticas
     this.actividades.forEach(act => {
       act.sucesoras.forEach(sucId => {
         const suc = mapa.get(sucId);
         if (suc) {
-          this.drawEdge(act, suc);
+          this.drawEdge3D(this.offscreenCtx, act, suc);
         }
       });
     });
 
-    // 2. Dibujar Fotones Cuánticos en Movimiento
+    // 3. Dibujar Fotones Cuánticos
     if (this.particlesEnabled) {
-      this.drawParticles();
+      this.drawParticles3D(this.offscreenCtx);
     }
 
-    // 3. Dibujar Nodos (Cápsulas Holográficas)
-    this.actividades.forEach(act => {
-      this.drawHoloNode(act);
+    // 4. Dibujar Nodos (Cápsulas Holográficas con Fresnel Glow)
+    // Ordenar nodos por profundidad Z para renderizado correcto
+    const sortedNodes = [...this.actividades].map(act => ({
+      act,
+      p: this.project3D(act.x, act.y, 0)
+    })).sort((a, b) => a.p.z - b.p.z);
+
+    sortedNodes.forEach(item => {
+      this.drawHoloNode3D(this.offscreenCtx, item.act, item.p);
     });
 
-    this.ctx.restore();
+    // 5. Dibujar Entidad de Luz JARVIS y Cola de Plasma
+    this.drawJarvisLight(this.offscreenCtx);
+
+    // =========================================================================
+    // CAPA C: EFECTO HOLOGRAMA FINAL (Aberración Cromática, Fresnel & Scanline)
+    // =========================================================================
+    this.ctx.clearRect(0, 0, this.width, this.height);
+    this.applyHolographicFilters();
   }
 
-  drawHoloGrid() {
-    const gridSize = 40 * this.scale;
-    const offsetX = this.panX % gridSize;
-    const offsetY = this.panY % gridSize;
+  drawCosmicVoid(ctx) {
+    // Fondo abisal con viñeta radial oscura
+    const bgGrad = ctx.createRadialGradient(
+      this.width / 2, this.height / 2, 80,
+      this.width / 2, this.height / 2, Math.max(this.width, this.height) * 0.75
+    );
+    bgGrad.addColorStop(0, '#070b1a');
+    bgGrad.addColorStop(0.6, '#03050c');
+    bgGrad.addColorStop(1, '#010206');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, this.width, this.height);
 
-    this.ctx.strokeStyle = 'rgba(0, 240, 255, 0.035)';
-    this.ctx.lineWidth = 1;
-
-    this.ctx.beginPath();
-    for (let x = offsetX; x < this.width; x += gridSize) {
-      this.ctx.moveTo(x, 0);
-      this.ctx.lineTo(x, this.height);
-    }
-    for (let y = offsetY; y < this.height; y += gridSize) {
-      this.ctx.moveTo(0, y);
-      this.ctx.lineTo(this.width, y);
-    }
-    this.ctx.stroke();
+    // Polvo cósmico en suspensión con parallax
+    ctx.save();
+    this.ambientParticles.forEach(p => {
+      const proj = this.project3D(p.x + 450, p.y + 250, p.z);
+      if (proj.x >= 0 && proj.x <= this.width && proj.y >= 0 && proj.y <= this.height) {
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, Math.max(0.5, p.size * proj.scale), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(0, 240, 255, ${p.alpha * 0.7})`;
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 4;
+        ctx.fill();
+      }
+    });
+    ctx.restore();
   }
 
-  drawEdge(source, target) {
+  drawInfiniteGrid(ctx) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.14)';
+    ctx.lineWidth = 1;
+
+    const gridLines = 26;
+    const step = 45;
+    const extent = gridLines * step / 2;
+
+    // Rejilla que se desliza hacia la cámara en Z
+    const zOffset = this.gridZOffset;
+
+    // Líneas Longitudinales (Paralelas a X)
+    for (let i = -extent; i <= extent; i += step) {
+      const pStart = this.project3D(-extent + 450, i + 250, 40 + zOffset);
+      const pEnd = this.project3D(extent + 450, i + 250, 40 + zOffset);
+
+      ctx.beginPath();
+      ctx.moveTo(pStart.x, pStart.y);
+      ctx.lineTo(pEnd.x, pEnd.y);
+      ctx.stroke();
+    }
+
+    // Líneas Transversales (Hacia la profundidad)
+    for (let i = -extent; i <= extent; i += step) {
+      const pStart = this.project3D(i + 450, -extent + 250, 40 + zOffset);
+      const pEnd = this.project3D(i + 450, extent + 250, 40 + zOffset);
+
+      ctx.beginPath();
+      ctx.moveTo(pStart.x, pStart.y);
+      ctx.lineTo(pEnd.x, pEnd.y);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * Dibuja Pilares Volumétricos de Luz hacia arriba, proporcionales a Te
+   */
+  drawHoloLightPillars(ctx) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    this.actividades.forEach(act => {
+      // Altura del pilar = Te * factor de escala
+      const pillarHeight = Math.max(25, (act.Te || 2) * 9.5);
+      const base = this.project3D(act.x, act.y, 0);
+      const top = this.project3D(act.x, act.y, -pillarHeight);
+
+      const isCritical = act.es_critica;
+      const baseColor = isCritical ? 'rgba(255, 0, 85, ' : 'rgba(0, 240, 255, ';
+
+      // Haz cónico de luz volumétrica
+      const beamGrad = ctx.createLinearGradient(base.x, base.y, top.x, top.y);
+      beamGrad.addColorStop(0, baseColor + '0.45)');
+      beamGrad.addColorStop(0.7, baseColor + '0.15)');
+      beamGrad.addColorStop(1, baseColor + '0.0)');
+
+      const beamRadius = (isCritical ? 35 : 24) * base.scale;
+
+      ctx.beginPath();
+      ctx.moveTo(base.x - beamRadius, base.y);
+      ctx.lineTo(top.x - beamRadius * 0.4, top.y);
+      ctx.lineTo(top.x + beamRadius * 0.4, top.y);
+      ctx.lineTo(base.x + beamRadius, base.y);
+      ctx.closePath();
+      ctx.fillStyle = beamGrad;
+      ctx.fill();
+
+      // Columna central de luz de alta intensidad
+      ctx.beginPath();
+      ctx.moveTo(base.x, base.y);
+      ctx.lineTo(top.x, top.y);
+      ctx.strokeStyle = isCritical ? 'rgba(255, 120, 180, 0.7)' : 'rgba(180, 250, 255, 0.5)';
+      ctx.lineWidth = (isCritical ? 3.0 : 1.8) * base.scale;
+      ctx.shadowColor = isCritical ? '#ff0055' : '#00f0ff';
+      ctx.shadowBlur = 12;
+      ctx.stroke();
+
+      // Anillo emisor en la cima de la columna de luz
+      ctx.beginPath();
+      ctx.ellipse(top.x, top.y, 14 * top.scale, 6 * top.scale, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = isCritical ? '#ff0055' : '#00f0ff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    });
+
+    ctx.restore();
+  }
+
+  drawEdge3D(ctx, source, target) {
     const isCritical = source.es_critica && target.es_critica;
     
-    // Coordenadas de salida y entrada
-    const startX = source.x + 70;
-    const startY = source.y;
-    const endX = target.x - 70;
-    const endY = target.y;
+    // Conectar desde los centros proyectados
+    const p1 = this.project3D(source.x + 65, source.y, 0);
+    const p2 = this.project3D(target.x - 65, target.y, 0);
 
-    const dx = endX - startX;
-    const cp1x = startX + dx * 0.5;
-    const cp1y = startY;
-    const cp2x = startX + dx * 0.5;
-    const cp2y = endY;
+    const dx = p2.x - p1.x;
+    const cp1x = p1.x + dx * 0.5;
+    const cp1y = p1.y;
+    const cp2x = p1.x + dx * 0.5;
+    const cp2y = p2.y;
 
-    this.ctx.beginPath();
-    this.ctx.moveTo(startX, startY);
-    this.ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endX, endY);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
 
     if (isCritical) {
-      // Rayo de Plasma Láser Magenta
-      this.ctx.strokeStyle = 'rgba(255, 0, 85, 0.9)';
-      this.ctx.lineWidth = 3.5;
-      this.ctx.shadowColor = '#ff0055';
-      this.ctx.shadowBlur = 12;
-      this.ctx.stroke();
+      // Rayo de Plasma Láser Carmesí/Magenta
+      ctx.strokeStyle = 'rgba(255, 0, 85, 0.95)';
+      ctx.lineWidth = 3.5 * p1.scale;
+      ctx.shadowColor = '#ff0055';
+      ctx.shadowBlur = 14;
+      ctx.stroke();
 
-      // Centro blanco incandescente
-      this.ctx.strokeStyle = 'rgba(255, 220, 240, 0.9)';
-      this.ctx.lineWidth = 1.2;
-      this.ctx.stroke();
-      this.ctx.shadowBlur = 0;
+      // Núcleo blanco caliente incandescente
+      ctx.strokeStyle = 'rgba(255, 235, 245, 0.95)';
+      ctx.lineWidth = 1.2 * p1.scale;
+      ctx.stroke();
     } else {
       // Fibra óptica cian suave
-      this.ctx.strokeStyle = 'rgba(0, 240, 255, 0.35)';
-      this.ctx.lineWidth = 1.8;
-      this.ctx.shadowBlur = 0;
-      this.ctx.stroke();
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+      ctx.lineWidth = 1.8 * p1.scale;
+      ctx.shadowBlur = 0;
+      ctx.stroke();
     }
 
     // Punta de flecha direccional
-    const angle = Math.atan2(endY - cp2y, endX - cp2x);
-    this.ctx.save();
-    this.ctx.translate(endX, endY);
-    this.ctx.rotate(angle);
-    this.ctx.fillStyle = isCritical ? '#ff0055' : '#00f0ff';
-    this.ctx.beginPath();
-    this.ctx.moveTo(-10, -5);
-    this.ctx.lineTo(0, 0);
-    this.ctx.lineTo(-10, 5);
-    this.ctx.closePath();
-    this.ctx.fill();
-    this.ctx.restore();
+    const angle = Math.atan2(p2.y - cp2y, p2.x - cp2x);
+    ctx.translate(p2.x, p2.y);
+    ctx.rotate(angle);
+    ctx.fillStyle = isCritical ? '#ff0055' : '#00f0ff';
+    ctx.beginPath();
+    ctx.moveTo(-10 * p2.scale, -5 * p2.scale);
+    ctx.lineTo(0, 0);
+    ctx.lineTo(-10 * p2.scale, 5 * p2.scale);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
   }
 
-  drawParticles() {
+  drawParticles3D(ctx) {
+    ctx.save();
     this.particles.forEach(p => {
       p.progress += p.speed;
       if (p.progress > 1) p.progress = 0;
 
-      const startX = p.source.x + 70;
-      const startY = p.source.y;
-      const endX = p.target.x - 70;
-      const endY = p.target.y;
+      const p1 = this.project3D(p.source.x + 65, p.source.y, 0);
+      const p2 = this.project3D(p.target.x - 65, p.target.y, 0);
 
-      const dx = endX - startX;
-      const cp1x = startX + dx * 0.5;
-      const cp1y = startY;
-      const cp2x = startX + dx * 0.5;
-      const cp2y = endY;
+      const dx = p2.x - p1.x;
+      const cp1x = p1.x + dx * 0.5;
+      const cp1y = p1.y;
+      const cp2x = p1.x + dx * 0.5;
+      const cp2y = p2.y;
 
-      // Evaluar Bezier cúbica en 'progress' (t)
       const t = p.progress;
-      const cx = 3 * (cp1x - startX);
+      const cx = 3 * (cp1x - p1.x);
       const bx = 3 * (cp2x - cp1x) - cx;
-      const ax = endX - startX - cx - bx;
+      const ax = p2.x - p1.x - cx - bx;
 
-      const cy = 3 * (cp1y - startY);
+      const cy = 3 * (cp1y - p1.y);
       const by = 3 * (cp2y - cp1y) - cy;
-      const ay = endY - startY - cy - by;
+      const ay = p2.y - p1.y - cy - by;
 
-      const px = ax * t * t * t + bx * t * t + cx * t + startX;
-      const py = ay * t * t * t + by * t * t + cy * t + startY;
+      const px = ax * t * t * t + bx * t * t + cx * t + p1.x;
+      const py = ay * t * t * t + by * t * t + cy * t + p1.y;
 
-      this.ctx.beginPath();
-      this.ctx.arc(px, py, p.size, 0, Math.PI * 2);
-      this.ctx.fillStyle = p.isCritical ? '#ff3377' : '#00f0ff';
-      this.ctx.shadowColor = p.isCritical ? '#ff0055' : '#00f0ff';
-      this.ctx.shadowBlur = p.isCritical ? 10 : 6;
-      this.ctx.fill();
-      this.ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.arc(px, py, p.size * p1.scale, 0, Math.PI * 2);
+      ctx.fillStyle = p.isCritical ? '#ff3388' : '#00f0ff';
+      ctx.shadowColor = p.isCritical ? '#ff0055' : '#00f0ff';
+      ctx.shadowBlur = p.isCritical ? 12 : 8;
+      ctx.fill();
     });
+    ctx.restore();
   }
 
-  drawHoloNode(act) {
-    const w = 140;
-    const h = 75;
-    const x = act.x - w / 2;
-    const y = act.y - h / 2;
-    const r = 6;
+  /**
+   * Dibuja Nodo Holográfico con Fresnel Glow en los bordes
+   */
+  drawHoloNode3D(ctx, act, p) {
+    const w = 135 * p.scale;
+    const h = 72 * p.scale;
+    const x = p.x - w / 2;
+    const y = p.y - h / 2;
+    const r = 6 * p.scale;
 
     const isHovered = this.hoveredNode === act;
     const isSelected = this.selectedNode === act;
 
-    // Color del borde según holgura
     let borderColor = '#00f0ff';
-    let glowColor = 'rgba(0, 240, 255, 0.4)';
+    let glowColor = 'rgba(0, 240, 255, 0.45)';
     let badgeColor = '#00f0ff';
 
     if (act.es_critica) {
       borderColor = '#ff0055';
-      glowColor = 'rgba(255, 0, 85, 0.7)';
+      glowColor = 'rgba(255, 0, 85, 0.8)';
       badgeColor = '#ff0055';
     } else if (act.holgura > 0 && act.holgura <= 2.5) {
-      // Holgura en zona de riesgo ámbar
       borderColor = '#ffb700';
-      glowColor = 'rgba(255, 183, 0, 0.6)';
+      glowColor = 'rgba(255, 183, 0, 0.7)';
       badgeColor = '#ffb700';
     }
 
-    // 1. Cuerpo de Cristal / Glassmorphism
-    this.ctx.save();
-    this.ctx.beginPath();
-    this.ctx.roundRect(x, y, w, h, r);
-    this.ctx.fillStyle = act.es_critica ? 'rgba(25, 8, 18, 0.88)' : 'rgba(8, 16, 32, 0.85)';
-    this.ctx.fill();
+    ctx.save();
 
-    // 2. Borde con Resplandor Neón
-    this.ctx.strokeStyle = borderColor;
-    this.ctx.lineWidth = isHovered || isSelected ? 2.5 : 1.5;
-    this.ctx.shadowColor = glowColor;
-    this.ctx.shadowBlur = isHovered || isSelected ? 16 : 8;
-    this.ctx.stroke();
-    this.ctx.shadowBlur = 0;
+    // 1. Fresnel Glow en el contorno del nodo
+    // (Bordes más brillantes cuando se ve de lado con rotación rotX/rotY)
+    const fresnelIntensity = Math.min(1.5, Math.abs(this.rotX) * 1.8 + Math.abs(this.rotY) * 1.2 + 0.6);
 
-    // 3. Franja superior (ID y Te)
-    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-    this.ctx.beginPath();
-    this.ctx.roundRect(x + 1, y + 1, w - 2, 22, [r, r, 0, 0]);
-    this.ctx.fill();
+    // 2. Fondo de Cristal Glassmorphism
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    ctx.fillStyle = act.es_critica ? 'rgba(30, 8, 22, 0.86)' : 'rgba(8, 16, 34, 0.82)';
+    ctx.fill();
 
-    // Texto ID
-    this.ctx.font = 'bold 11px "Orbitron", sans-serif';
-    this.ctx.fillStyle = badgeColor;
-    this.ctx.textAlign = 'left';
-    this.ctx.fillText(act.id, x + 8, y + 15);
+    // 3. Resplandor Neón
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = (isHovered || isSelected ? 2.8 : 1.6) * p.scale;
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur = (isHovered || isSelected ? 20 : 10) * fresnelIntensity;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
 
-    // Texto Te (Duración)
-    this.ctx.font = '10px "JetBrains Mono", monospace';
-    this.ctx.fillStyle = '#fff';
-    this.ctx.textAlign = 'right';
-    this.ctx.fillText(`Te: ${act.Te.toFixed(1)}d`, x + w - 8, y + 15);
+    // 4. Franja Superior (ID y Te)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.beginPath();
+    ctx.roundRect(x + 1, y + 1, w - 2, 22 * p.scale, [r, r, 0, 0]);
+    ctx.fill();
 
-    // 4. Nombre de Actividad (Recortado)
-    this.ctx.font = '600 11px "Rajdhani", sans-serif';
-    this.ctx.fillStyle = '#cbd5e1';
-    this.ctx.textAlign = 'left';
-    const cleanName = act.nombre.length > 17 ? act.nombre.slice(0, 16) + '…' : act.nombre;
-    this.ctx.fillText(cleanName, x + 8, y + 36);
+    // Textos
+    const fontSizeId = Math.max(9, Math.round(11 * p.scale));
+    ctx.font = `bold ${fontSizeId}px "Orbitron", sans-serif`;
+    ctx.fillStyle = badgeColor;
+    ctx.textAlign = 'left';
+    ctx.fillText(act.id, x + 8 * p.scale, y + 15 * p.scale);
 
-    // 5. Matriz de Tiempos Cuánticos: ES | EF / LS | LF
-    this.ctx.font = '9px "JetBrains Mono", monospace';
-    this.ctx.fillStyle = '#64748b';
-    this.ctx.fillText(`ES:${act.ES.toFixed(1)}`, x + 8, y + 51);
-    this.ctx.fillText(`EF:${act.EF.toFixed(1)}`, x + 72, y + 51);
+    const fontSizeTe = Math.max(8, Math.round(10 * p.scale));
+    ctx.font = `${fontSizeTe}px "JetBrains Mono", monospace`;
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'right';
+    ctx.fillText(`Te:${act.Te.toFixed(1)}d`, x + w - 8 * p.scale, y + 15 * p.scale);
 
-    this.ctx.fillText(`LS:${act.LS.toFixed(1)}`, x + 8, y + 64);
-    this.ctx.fillText(`LF:${act.LF.toFixed(1)}`, x + 72, y + 64);
+    // Nombre de Actividad
+    const fontSizeName = Math.max(8, Math.round(10.5 * p.scale));
+    ctx.font = `600 ${fontSizeName}px "Rajdhani", sans-serif`;
+    ctx.fillStyle = '#cbd5e1';
+    ctx.textAlign = 'left';
+    const cleanName = act.nombre.length > 16 ? act.nombre.slice(0, 15) + '…' : act.nombre;
+    ctx.fillText(cleanName, x + 8 * p.scale, y + 36 * p.scale);
 
-    // 6. Barra o Indicador de Holgura
+    // Matriz de Tiempos ES, EF, LS, LF
+    const fontSizeMatrix = Math.max(7, Math.round(8.5 * p.scale));
+    ctx.font = `${fontSizeMatrix}px "JetBrains Mono", monospace`;
+    ctx.fillStyle = '#64748b';
+    ctx.fillText(`ES:${act.ES.toFixed(1)}`, x + 8 * p.scale, y + 50 * p.scale);
+    ctx.fillText(`EF:${act.EF.toFixed(1)}`, x + 68 * p.scale, y + 50 * p.scale);
+    ctx.fillText(`LS:${act.LS.toFixed(1)}`, x + 8 * p.scale, y + 63 * p.scale);
+    ctx.fillText(`LF:${act.LF.toFixed(1)}`, x + 68 * p.scale, y + 63 * p.scale);
+
+    // Indicador de Holgura
+    ctx.textAlign = 'right';
     if (!act.es_critica) {
-      this.ctx.fillStyle = act.holgura <= 2.5 ? '#ffb700' : '#00f0ff';
-      this.ctx.textAlign = 'right';
-      this.ctx.fillText(`H:${act.holgura.toFixed(1)}`, x + w - 8, y + 64);
+      ctx.fillStyle = act.holgura <= 2.5 ? '#ffb700' : '#00f0ff';
+      ctx.fillText(`H:${act.holgura.toFixed(1)}`, x + w - 6 * p.scale, y + 63 * p.scale);
     } else {
-      this.ctx.fillStyle = '#ff0055';
-      this.ctx.textAlign = 'right';
-      this.ctx.fillText('CRÍTICO', x + w - 8, y + 64);
+      ctx.fillStyle = '#ff0055';
+      ctx.fillText('CRÍT', x + w - 6 * p.scale, y + 63 * p.scale);
     }
+
+    ctx.restore();
+  }
+
+  /**
+   * Dibuja la Entidad de Luz JARVIS IA patrullando la red con cola de plasma
+   */
+  drawJarvisLight(ctx) {
+    if (!this.jarvisLight.trail || this.jarvisLight.trail.length === 0) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    const isAlert = this.jarvisLight.mode === 'ALERT';
+    const baseColor = isAlert ? '255, 0, 85' : '0, 240, 255';
+
+    // 1. Dibujar Cola de Plasma (degradado desde blanco/rosa hasta transparente)
+    for (let i = this.jarvisLight.trail.length - 1; i >= 1; i--) {
+      const p1 = this.project3D(this.jarvisLight.trail[i].x, this.jarvisLight.trail[i].y, this.jarvisLight.trail[i].z);
+      const p2 = this.project3D(this.jarvisLight.trail[i - 1].x, this.jarvisLight.trail[i - 1].y, this.jarvisLight.trail[i - 1].z);
+
+      const ratio = 1 - (i / this.jarvisLight.trail.length);
+
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.strokeStyle = `rgba(${baseColor}, ${ratio * 0.8})`;
+      ctx.lineWidth = (ratio * 5.5 + 1.5) * p1.scale;
+      ctx.shadowColor = isAlert ? '#ff0055' : '#00f0ff';
+      ctx.shadowBlur = 12;
+      ctx.stroke();
+    }
+
+    // 2. Núcleo de la Entidad de Luz JARVIS
+    const head = this.jarvisLight.trail[0];
+    const headProj = this.project3D(head.x, head.y, head.z);
+
+    // Halo esférico de luz que ilumina nodos circundantes
+    const haloRadius = (isAlert ? 45 : 30) * headProj.scale;
+    const haloGrad = ctx.createRadialGradient(
+      headProj.x, headProj.y, 2,
+      headProj.x, headProj.y, haloRadius
+    );
+    haloGrad.addColorStop(0, '#ffffff');
+    haloGrad.addColorStop(0.3, `rgba(${baseColor}, 0.9)`);
+    haloGrad.addColorStop(0.7, `rgba(${baseColor}, 0.25)`);
+    haloGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+    ctx.beginPath();
+    ctx.arc(headProj.x, headProj.y, haloRadius, 0, Math.PI * 2);
+    ctx.fillStyle = haloGrad;
+    ctx.fill();
+
+    // Pulso expansivo al llegar a nodos
+    if (this.jarvisLight.pulseIntensity > 0) {
+      const pulseR = haloRadius * (1 + (1 - this.jarvisLight.pulseIntensity) * 2.2);
+      ctx.beginPath();
+      ctx.arc(headProj.x, headProj.y, pulseR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${baseColor}, ${this.jarvisLight.pulseIntensity * 0.8})`;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * Post-procesado Holográfico: Aberración Cromática RGB + Scanline Sweep + Flicker
+   */
+  applyHolographicFilters() {
+    this.ctx.save();
+    this.ctx.globalAlpha = this.flickerAlpha;
+
+    if (this.chromaticEnabled) {
+      // Aberración Cromática (Canales RGB desplazados 1.5px)
+      this.ctx.globalCompositeOperation = 'screen';
+
+      // Canal Rojo (desplazado a la izquierda)
+      this.ctx.drawImage(this.offscreenCanvas, -1.5, 0);
+
+      // Canal Verde (centro)
+      this.ctx.drawImage(this.offscreenCanvas, 0, 0);
+
+      // Canal Azul (desplazado a la derecha)
+      this.ctx.drawImage(this.offscreenCanvas, 1.5, 0);
+    } else {
+      this.ctx.drawImage(this.offscreenCanvas, 0, 0);
+    }
+
+    // Scanline láser horizontal que barre de arriba hacia abajo cada 3 segundos
+    this.ctx.beginPath();
+    this.ctx.moveTo(0, this.scanlineY);
+    this.ctx.lineTo(this.width, this.scanlineY);
+    this.ctx.strokeStyle = 'rgba(0, 240, 255, 0.22)';
+    this.ctx.lineWidth = 2;
+    this.ctx.shadowColor = '#00f0ff';
+    this.ctx.shadowBlur = 8;
+    this.ctx.stroke();
 
     this.ctx.restore();
   }
