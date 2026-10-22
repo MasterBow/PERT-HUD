@@ -143,7 +143,7 @@ class QuantumCanvasRenderer {
       const clicked = this.getNodeAtScreen(mouse.x, mouse.y);
 
       if (clicked && e.button === 0) {
-        // Clic en nodo -> seleccionar y arrastrar
+        // Clic izquierdo en nodo -> seleccionar y arrastrar
         this.draggedNode = clicked;
         const proj = this.project3D(clicked.x, clicked.y, 0);
         this.dragOffset.x = mouse.x - proj.x;
@@ -151,9 +151,16 @@ class QuantumCanvasRenderer {
         this.selectedNode = clicked;
         if (window.quantumAudio) window.quantumAudio.playClick();
         if (this.onNodeClick) this.onNodeClick(clicked);
-      } else {
-        // Arrastrar fondo -> Rotación 3D tipo JARVIS
+      } else if (e.button === 2 || e.shiftKey || e.button === 1) {
+        // Clic derecho, botón central o Shift + clic -> PAN (desplazamiento 2D del lienzo)
+        this.isPanning = true;
+        this.isOrbiting = false;
+        this.startMouse.x = e.clientX;
+        this.startMouse.y = e.clientY;
+      } else if (e.button === 0) {
+        // Arrastrar fondo con botón izquierdo -> Rotación 3D tipo JARVIS
         this.isOrbiting = true;
+        this.isPanning = false;
         this.startMouse.x = e.clientX;
         this.startMouse.y = e.clientY;
       }
@@ -164,11 +171,18 @@ class QuantumCanvasRenderer {
       const mouse = this.getScreenCoords(e);
 
       if (this.draggedNode) {
-        // Proyección inversa aproximada en el plano Z=0
-        const dx = (e.clientX - this.startMouse.x) / this.scale;
-        const dy = (e.clientY - this.startMouse.y) / this.scale;
-        this.draggedNode.x += dx * 0.7;
-        this.draggedNode.y += dy * 0.7;
+        // Proyección inversa adaptada a la escala y rotación actual
+        const dx = (e.clientX - this.startMouse.x) / Math.max(0.3, this.scale);
+        const dy = (e.clientY - this.startMouse.y) / Math.max(0.3, this.scale);
+        this.draggedNode.x += dx * 0.85;
+        this.draggedNode.y += dy * 0.85;
+        this.startMouse.x = e.clientX;
+        this.startMouse.y = e.clientY;
+      } else if (this.isPanning) {
+        const deltaX = e.clientX - this.startMouse.x;
+        const deltaY = e.clientY - this.startMouse.y;
+        this.panX += deltaX;
+        this.panY += deltaY;
         this.startMouse.x = e.clientX;
         this.startMouse.y = e.clientY;
       } else if (this.isOrbiting) {
@@ -199,19 +213,27 @@ class QuantumCanvasRenderer {
     // Mouse Up
     window.addEventListener('mouseup', () => {
       this.isOrbiting = false;
+      this.isPanning = false;
       this.draggedNode = null;
     });
 
-    // Zoom con rueda de ratón
+    // Zoom con rueda de ratón centrado suavemente hacia la posición del cursor
     this.canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-      this.scale = Math.min(Math.max(0.4, this.scale * zoomFactor), 2.2);
+      const mouse = this.getScreenCoords(e);
+      const zoomFactor = e.deltaY < 0 ? 1.09 : 0.91;
+      const newScale = Math.min(Math.max(0.35, this.scale * zoomFactor), 2.5);
+
+      // Desplazamiento de pan para que el zoom enfoque hacia donde apunta el cursor
+      this.panX = mouse.x - (mouse.x - this.panX) * (newScale / this.scale);
+      this.panY = mouse.y - (mouse.y - this.panY) * (newScale / this.scale);
+      this.scale = newScale;
     }, { passive: false });
 
     // Touch Events para móviles y tablets Android / iOS
     this.initialPinchDistance = null;
     this.initialPinchScale = 1.0;
+    this.initialTouchCenter = { x: 0, y: 0 };
     this.lastTouchPos = { x: 0, y: 0 };
     this.isTouchDragging = false;
 
@@ -238,13 +260,19 @@ class QuantumCanvasRenderer {
           this.startMouse.y = touch.clientY;
         }
       } else if (e.touches.length === 2) {
-        // Inicializar gesto Pinch-to-Zoom con Delta
+        // Inicializar gesto Pinch-to-Zoom y Pan con dos dedos
         this.isOrbiting = false;
         this.draggedNode = null;
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         this.initialPinchDistance = Math.hypot(dx, dy);
         this.initialPinchScale = this.scale;
+        this.initialTouchCenter = {
+          x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+          y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+        };
+        this.lastTouchPos.x = this.initialTouchCenter.x;
+        this.lastTouchPos.y = this.initialTouchCenter.y;
       }
     }, { passive: false });
 
@@ -257,8 +285,8 @@ class QuantumCanvasRenderer {
         const deltaY = touch.clientY - this.lastTouchPos.y;
 
         if (this.draggedNode) {
-          this.draggedNode.x += deltaX * (0.8 / Math.max(0.5, this.scale));
-          this.draggedNode.y += deltaY * (0.8 / Math.max(0.5, this.scale));
+          this.draggedNode.x += deltaX * (0.85 / Math.max(0.4, this.scale));
+          this.draggedNode.y += deltaY * (0.85 / Math.max(0.4, this.scale));
         } else if (this.isOrbiting) {
           // Rotación orbital con sensibilidad delta adaptativa
           this.targetRotY += deltaX * 0.007;
@@ -269,11 +297,21 @@ class QuantumCanvasRenderer {
         this.lastTouchPos.x = touch.clientX;
         this.lastTouchPos.y = touch.clientY;
       } else if (e.touches.length === 2 && this.initialPinchDistance) {
-        // Pinch Zoom reactivo
+        // Pinch Zoom reactivo y Pan con dos dedos
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const currentDistance = Math.hypot(dx, dy);
         const pinchDeltaFactor = currentDistance / this.initialPinchDistance;
+
+        const currentCenter = {
+          x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+          y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+        };
+        // Desplazamiento simultáneo (Pan con dos dedos)
+        this.panX += currentCenter.x - this.lastTouchPos.x;
+        this.panY += currentCenter.y - this.lastTouchPos.y;
+        this.lastTouchPos.x = currentCenter.x;
+        this.lastTouchPos.y = currentCenter.y;
 
         this.scale = Math.min(Math.max(0.35, this.initialPinchScale * pinchDeltaFactor), 2.5);
       }
@@ -342,8 +380,9 @@ class QuantumCanvasRenderer {
     for (let i = this.actividades.length - 1; i >= 0; i--) {
       const act = this.actividades[i];
       const p = this.project3D(act.x, act.y, 0);
-      const w = 130 * p.scale;
-      const h = 70 * p.scale;
+      const effectiveScale = Math.max(0.65, Math.min(1.4, p.scale));
+      const w = 150 * effectiveScale;
+      const h = 82 * effectiveScale;
 
       if (
         sx >= p.x - w / 2 &&
@@ -386,11 +425,38 @@ class QuantumCanvasRenderer {
   }
 
   recenter() {
-    this.scale = 1.0;
-    this.targetRotX = 0.35;
+    this.targetRotX = 0.30;
     this.targetRotY = 0.0;
+
+    if (!this.actividades || this.actividades.length === 0) {
+      this.scale = 1.0;
+      this.panX = this.width / 2;
+      this.panY = this.height / 2 + 30;
+      return;
+    }
+
+    // Calcular bounding box del grafo para auto-encuadrar
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    this.actividades.forEach(act => {
+      if (act.x !== null) {
+        minX = Math.min(minX, act.x);
+        maxX = Math.max(maxX, act.x);
+      }
+      if (act.y !== null) {
+        minY = Math.min(minY, act.y);
+        maxY = Math.max(maxY, act.y);
+      }
+    });
+
+    const graphWidth = Math.max(260, maxX - minX + 240);
+    const graphHeight = Math.max(160, maxY - minY + 160);
+    const availWidth = Math.max(300, this.width - 60);
+    const availHeight = Math.max(200, this.height - 80);
+
+    const fitScale = Math.min(availWidth / graphWidth, availHeight / graphHeight);
+    this.scale = Math.min(Math.max(0.65, fitScale * 0.95), 1.25);
     this.panX = this.width / 2;
-    this.panY = this.height / 2 + 40;
+    this.panY = this.height / 2 + 25;
   }
 
   setGraphData(resultado) {
@@ -640,27 +706,25 @@ class QuantumCanvasRenderer {
   }
 
   drawCosmicVoid(ctx) {
-    // Fondo abisal con viñeta radial oscura
+    // Fondo abisal con viñeta radial oscura y centro con profundidad
     const bgGrad = ctx.createRadialGradient(
       this.width / 2, this.height / 2, 80,
       this.width / 2, this.height / 2, Math.max(this.width, this.height) * 0.75
     );
-    bgGrad.addColorStop(0, '#070b1a');
-    bgGrad.addColorStop(0.6, '#03050c');
-    bgGrad.addColorStop(1, '#010206');
+    bgGrad.addColorStop(0, '#060a18');
+    bgGrad.addColorStop(0.55, '#03050c');
+    bgGrad.addColorStop(1, '#010205');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, this.width, this.height);
 
-    // Polvo cósmico en suspensión con parallax
+    // Polvo cósmico en suspensión con parallax (estrellas de fondo nítidas sin sobrecarga de blur)
     ctx.save();
+    ctx.fillStyle = 'rgba(0, 240, 255, 0.55)';
     this.ambientParticles.forEach(p => {
       const proj = this.project3D(p.x + 450, p.y + 250, p.z);
       if (proj.x >= 0 && proj.x <= this.width && proj.y >= 0 && proj.y <= this.height) {
         ctx.beginPath();
-        ctx.arc(proj.x, proj.y, Math.max(0.5, p.size * proj.scale), 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(0, 240, 255, ${p.alpha * 0.7})`;
-        ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 4;
+        ctx.arc(proj.x, proj.y, Math.max(0.6, p.size * proj.scale), 0, Math.PI * 2);
         ctx.fill();
       }
     });
@@ -670,37 +734,34 @@ class QuantumCanvasRenderer {
   drawInfiniteGrid(ctx) {
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
-    ctx.strokeStyle = 'rgba(0, 240, 255, 0.14)';
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.11)';
     ctx.lineWidth = 1;
 
-    const gridLines = 26;
-    const step = 45;
+    // Reducir la malla a un paso óptimo para rendimiento elevado (60fps)
+    const gridLines = 20;
+    const step = 60;
     const extent = gridLines * step / 2;
 
     // Rejilla que se desliza hacia la cámara en Z
     const zOffset = this.gridZOffset;
 
     // Líneas Longitudinales (Paralelas a X)
+    ctx.beginPath();
     for (let i = -extent; i <= extent; i += step) {
       const pStart = this.project3D(-extent + 450, i + 250, 40 + zOffset);
       const pEnd = this.project3D(extent + 450, i + 250, 40 + zOffset);
-
-      ctx.beginPath();
       ctx.moveTo(pStart.x, pStart.y);
       ctx.lineTo(pEnd.x, pEnd.y);
-      ctx.stroke();
     }
 
     // Líneas Transversales (Hacia la profundidad)
     for (let i = -extent; i <= extent; i += step) {
       const pStart = this.project3D(i + 450, -extent + 250, 40 + zOffset);
       const pEnd = this.project3D(i + 450, extent + 250, 40 + zOffset);
-
-      ctx.beginPath();
       ctx.moveTo(pStart.x, pStart.y);
       ctx.lineTo(pEnd.x, pEnd.y);
-      ctx.stroke();
     }
+    ctx.stroke();
 
     ctx.restore();
   }
@@ -850,13 +911,13 @@ class QuantumCanvasRenderer {
   }
 
   /**
-   * Dibuja Nodo Holográfico con Fresnel Glow en los bordes
+   * Dibuja Nodo Holográfico con Fresnel Glow en los bordes y máxima legibilidad
    */
   drawHoloNode3D(ctx, act, p) {
-    // Factor de legibilidad dinámica para pantallas de diferente densidad y escala
-    const effectiveScale = Math.max(0.65, Math.min(1.4, p.scale));
-    const w = 142 * effectiveScale;
-    const h = 76 * effectiveScale;
+    // Factor de escala con límites protegidos para legibilidad garantizada
+    const effectiveScale = Math.max(0.72, Math.min(1.35, p.scale));
+    const w = 150 * effectiveScale;
+    const h = 80 * effectiveScale;
     const x = p.x - w / 2;
     const y = p.y - h / 2;
     const r = Math.max(4, 6 * effectiveScale);
@@ -870,78 +931,78 @@ class QuantumCanvasRenderer {
 
     if (act.es_critica) {
       borderColor = '#ff0055';
-      glowColor = 'rgba(255, 0, 85, 0.8)';
-      badgeColor = '#ff0055';
+      glowColor = 'rgba(255, 0, 85, 0.85)';
+      badgeColor = '#ff2a70';
     } else if (act.holgura > 0 && act.holgura <= 2.5) {
       borderColor = '#ffb700';
-      glowColor = 'rgba(255, 183, 0, 0.7)';
+      glowColor = 'rgba(255, 183, 0, 0.75)';
       badgeColor = '#ffb700';
     }
 
     ctx.save();
 
     // 1. Fresnel Glow en el contorno del nodo
-    // (Bordes más brillantes cuando se ve de lado con rotación rotX/rotY)
-    const fresnelIntensity = Math.min(1.5, Math.abs(this.rotX) * 1.8 + Math.abs(this.rotY) * 1.2 + 0.6);
+    const fresnelIntensity = Math.min(1.4, Math.abs(this.rotX) * 1.6 + Math.abs(this.rotY) * 1.1 + 0.6);
 
-    // 2. Fondo de Cristal Glassmorphism
+    // 2. Fondo Opaco de Alto Contraste (para que el texto siempre sea 100% legible sobre cualquier pilar o rayo)
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, r);
-    ctx.fillStyle = act.es_critica ? 'rgba(32, 9, 24, 0.90)' : 'rgba(9, 18, 38, 0.88)';
+    ctx.fillStyle = act.es_critica ? 'rgba(24, 7, 18, 0.96)' : 'rgba(7, 14, 30, 0.95)';
     ctx.fill();
 
-    // 3. Resplandor Neón
+    // 3. Resplandor Neón y Borde
     ctx.strokeStyle = borderColor;
     ctx.lineWidth = (isHovered || isSelected ? 2.8 : 1.8) * effectiveScale;
     ctx.shadowColor = glowColor;
-    ctx.shadowBlur = (isHovered || isSelected ? 20 : 10) * fresnelIntensity;
+    ctx.shadowBlur = (isHovered || isSelected ? 18 : 8) * fresnelIntensity;
     ctx.stroke();
-    ctx.shadowBlur = 0;
+    ctx.shadowBlur = 0; // Desactivar sombra para que el texto sea perfectamente nítido y rápido de renderizar
 
     // 4. Franja Superior (ID y Te)
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
     ctx.beginPath();
-    ctx.roundRect(x + 1, y + 1, w - 2, 23 * effectiveScale, [r, r, 0, 0]);
+    ctx.roundRect(x + 1, y + 1, w - 2, 24 * effectiveScale, [r, r, 0, 0]);
     ctx.fill();
 
-    // Textos con tamaños protegidos para legibilidad en Android / móvil
-    const fontSizeId = Math.max(10, Math.round(12 * effectiveScale));
+    // ID del Nodo (Nítido y brillante)
+    const fontSizeId = Math.max(11, Math.round(13 * effectiveScale));
     ctx.font = `bold ${fontSizeId}px "Orbitron", sans-serif`;
     ctx.fillStyle = badgeColor;
     ctx.textAlign = 'left';
-    ctx.fillText(act.id, x + 8 * effectiveScale, y + 16 * effectiveScale);
+    ctx.fillText(act.id, x + 8 * effectiveScale, y + 17 * effectiveScale);
 
-    const fontSizeTe = Math.max(9, Math.round(11 * effectiveScale));
-    ctx.font = `600 ${fontSizeTe}px "JetBrains Mono", monospace`;
-    ctx.fillStyle = '#fff';
+    // Duración Te
+    const fontSizeTe = Math.max(10, Math.round(11.5 * effectiveScale));
+    ctx.font = `700 ${fontSizeTe}px "JetBrains Mono", monospace`;
+    ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'right';
-    ctx.fillText(`Te:${act.Te.toFixed(1)}d`, x + w - 8 * effectiveScale, y + 16 * effectiveScale);
+    ctx.fillText(`Te:${act.Te.toFixed(1)}d`, x + w - 8 * effectiveScale, y + 17 * effectiveScale);
 
-    // Nombre de Actividad
-    const fontSizeName = Math.max(9.5, Math.round(11.5 * effectiveScale));
-    ctx.font = `600 ${fontSizeName}px "Rajdhani", sans-serif`;
-    ctx.fillStyle = '#e2e8f0';
+    // Nombre de Actividad (Contraste alto, limpio)
+    const fontSizeName = Math.max(10.5, Math.round(12.5 * effectiveScale));
+    ctx.font = `700 ${fontSizeName}px "Rajdhani", sans-serif`;
+    ctx.fillStyle = '#f1f5f9';
     ctx.textAlign = 'left';
     const cleanName = act.nombre.length > 17 ? act.nombre.slice(0, 16) + '…' : act.nombre;
-    ctx.fillText(cleanName, x + 8 * effectiveScale, y + 37 * effectiveScale);
+    ctx.fillText(cleanName, x + 8 * effectiveScale, y + 39 * effectiveScale);
 
     // Matriz de Tiempos ES, EF, LS, LF
-    const fontSizeMatrix = Math.max(8.5, Math.round(9.5 * effectiveScale));
-    ctx.font = `500 ${fontSizeMatrix}px "JetBrains Mono", monospace`;
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillText(`ES:${act.ES.toFixed(1)}`, x + 8 * effectiveScale, y + 52 * effectiveScale);
-    ctx.fillText(`EF:${act.EF.toFixed(1)}`, x + 72 * effectiveScale, y + 52 * effectiveScale);
-    ctx.fillText(`LS:${act.LS.toFixed(1)}`, x + 8 * effectiveScale, y + 66 * effectiveScale);
-    ctx.fillText(`LF:${act.LF.toFixed(1)}`, x + 72 * effectiveScale, y + 66 * effectiveScale);
+    const fontSizeMatrix = Math.max(9, Math.round(10.5 * effectiveScale));
+    ctx.font = `600 ${fontSizeMatrix}px "JetBrains Mono", monospace`;
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText(`ES:${act.ES.toFixed(1)}`, x + 8 * effectiveScale, y + 55 * effectiveScale);
+    ctx.fillText(`EF:${act.EF.toFixed(1)}`, x + 76 * effectiveScale, y + 55 * effectiveScale);
+    ctx.fillText(`LS:${act.LS.toFixed(1)}`, x + 8 * effectiveScale, y + 70 * effectiveScale);
+    ctx.fillText(`LF:${act.LF.toFixed(1)}`, x + 76 * effectiveScale, y + 70 * effectiveScale);
 
     // Indicador de Holgura
     ctx.textAlign = 'right';
     if (!act.es_critica) {
       ctx.fillStyle = act.holgura <= 2.5 ? '#ffb700' : '#00f0ff';
-      ctx.fillText(`H:${act.holgura.toFixed(1)}`, x + w - 6 * effectiveScale, y + 66 * effectiveScale);
+      ctx.fillText(`H:${act.holgura.toFixed(1)}`, x + w - 7 * effectiveScale, y + 70 * effectiveScale);
     } else {
-      ctx.fillStyle = '#ff0055';
-      ctx.fillText('CRÍTICO', x + w - 6 * effectiveScale, y + 66 * effectiveScale);
+      ctx.fillStyle = '#ff2a70';
+      ctx.fillText('CRÍTICO', x + w - 7 * effectiveScale, y + 70 * effectiveScale);
     }
 
     ctx.restore();
@@ -1010,33 +1071,31 @@ class QuantumCanvasRenderer {
   }
 
   /**
-   * Post-procesado Holográfico: Aberración Cromática RGB + Scanline Sweep + Flicker
+   * Post-procesado Holográfico: Aberración Cromática RGB nítida + Scanline Sweep
    */
   applyHolographicFilters() {
     this.ctx.save();
     this.ctx.globalAlpha = this.flickerAlpha;
 
-    if (this.chromaticEnabled) {
-      // Aberración Cromática optimizada (desfase RGB con dos pases aditivos ligeros)
-      this.ctx.globalCompositeOperation = 'source-over';
-      this.ctx.drawImage(this.offscreenCanvas, 0, 0, this.width, this.height);
+    // Pase base directo ultra-nítido
+    this.ctx.drawImage(this.offscreenCanvas, 0, 0, this.width, this.height);
 
+    if (this.chromaticEnabled) {
+      // Aberración sutil sin arruinar la legibilidad de fuentes
       this.ctx.globalCompositeOperation = 'screen';
-      this.ctx.globalAlpha = 0.35 * this.flickerAlpha;
-      this.ctx.drawImage(this.offscreenCanvas, -1.8, 0, this.width, this.height);
-      this.ctx.drawImage(this.offscreenCanvas, 1.8, 0, this.width, this.height);
-    } else {
-      this.ctx.drawImage(this.offscreenCanvas, 0, 0, this.width, this.height);
+      this.ctx.globalAlpha = 0.22 * this.flickerAlpha;
+      this.ctx.drawImage(this.offscreenCanvas, -1.2, 0, this.width, this.height);
+      this.ctx.drawImage(this.offscreenCanvas, 1.2, 0, this.width, this.height);
+      this.ctx.globalCompositeOperation = 'source-over';
+      this.ctx.globalAlpha = this.flickerAlpha;
     }
 
-    // Scanline láser horizontal que barre de arriba hacia abajo cada 3 segundos
+    // Scanline láser horizontal que barre de arriba hacia abajo
     this.ctx.beginPath();
     this.ctx.moveTo(0, this.scanlineY);
     this.ctx.lineTo(this.width, this.scanlineY);
-    this.ctx.strokeStyle = 'rgba(0, 240, 255, 0.22)';
-    this.ctx.lineWidth = 2;
-    this.ctx.shadowColor = '#00f0ff';
-    this.ctx.shadowBlur = 8;
+    this.ctx.strokeStyle = 'rgba(0, 240, 255, 0.16)';
+    this.ctx.lineWidth = 1.5;
     this.ctx.stroke();
 
     this.ctx.restore();
